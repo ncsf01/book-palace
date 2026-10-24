@@ -98,6 +98,9 @@ function errorMessage(e) {
   return 'Não consegui salvar agora. Tente de novo.';
 }
 const canEdit = () => !!S.user && !S.noAccess && S.loaded;
+// Drag and drop only with a mouse. On phones, tapping a book opens the editor,
+// where shelf, row and position are chosen with buttons.
+const canDrag = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 
 /* ---------- rendering ---------- */
 function bookButton(b, num, extra) {
@@ -117,7 +120,7 @@ function renderShelf() {
   if (!id || !S.shelves[id]) return `<div class="state"><h2>Nenhuma estante ainda</h2><p>Crie a primeira estante ou importe um backup do estoque.</p>${canEdit() ? `<button class="btn blue" id="createFirst">Criar estante</button> <button class="btn" data-action="import">Importar backup</button>` : ''}</div>`;
   const lists = rowLists(id); const n = lists.length - 1; const all = S.books.filter(b => b.shelf === id); const w = canEdit();
   let h = `<div class="shelfbar"><div><div class="eyebrow">Estante</div><h2>${esc(shelfName(id))}</h2><div class="meta">${countCopies(all)} livros · ${all.length} títulos · ${n} ${n > 1 ? 'fileiras' : 'fileira'}</div></div><div class="acts"><div class="seg" role="group" aria-label="Modo de ver"><button data-view="rows" class="${S.view === 'rows' ? 'on' : ''}">Fileiras</button><button data-view="az" class="${S.view === 'az' ? 'on' : ''}">Ordem A–Z</button></div>${w ? `<button class="btn" id="rowAdd">+ Fileira</button><button class="btn" id="rowRemove" ${lists[n].length || n <= 1 ? 'disabled' : ''} title="Só dá pra tirar a última fileira quando ela está vazia">− Fileira</button><button class="btn" id="editShelf">Editar estante</button>` : ''}</div></div>`;
-  if (!all.length) return h + `<div class="state"><h2>Estante vazia</h2><p>${w ? 'Toque em “+ Livro” pra colocar o primeiro livro aqui, ou arraste livros de outra estante.' : 'Ainda não tem livros aqui.'}</p></div>`;
+  if (!all.length) return h + `<div class="state"><h2>Estante vazia</h2><p>${w ? 'Toque em “+ Livro” pra colocar o primeiro livro aqui, ou mude livros de outra estante pra cá.' : 'Ainda não tem livros aqui.'}</p></div>`;
   if (S.view === 'az') {
     const sorted = [...all].sort(byKey); let cur = '', i = 0;
     h += `<p class="hint">Todos os livros desta estante na ordem A–Z, pelo nome do autor como está na capa. Use pra arrumar ou conferir: comece na fileira de cima, da esquerda pra direita.</p><div class="list">`;
@@ -125,13 +128,14 @@ function renderShelf() {
     return h + '</div>';
   }
   const cols = []; if (lists[0].length) cols.push(0); for (let r = 1; r <= n; r++) cols.push(r);
-  if (w) h += `<p class="hint">Toque num livro pra editar. Pra mudar de lugar, segure o livro um instante e arraste pra outra posição, outra fileira ou, pela barra de baixo, outra estante.</p>`;
+  const drag = w && canDrag();
+  if (w) h += `<p class="hint">${drag ? 'Clique num livro pra editar. Pra mudar de lugar, arraste o livro pra outra posição, outra fileira ou, pela barra de baixo, outra estante.' : 'Toque num livro pra editar ou pra mudar ele de estante, fileira ou posição.'}</p>`;
   h += `<div class="jump" role="group" aria-label="Ir pra fileira">${cols.map(r => `<button class="pill" data-jump="${r}">${r ? 'Fileira ' + r : 'Sem fileira'} · <b>${countCopies(lists[r])}</b></button>`).join('')}</div><div class="board" id="board">`;
   cols.forEach(r => {
     const l = lists[r];
     h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${countCopies(l)} livros</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
-    if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira. Arraste pra mudar a ordem ou pra levar até uma fileira. “Ordenar” põe a lista por autor, título ou categoria.</div>`;
-    h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? i + 1 : '')).join('') : `<div class="emptycol">${w ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia.'}</div>`}</div></section>`;
+    if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira. ${drag ? 'Arraste pra mudar a ordem ou pra levar até uma fileira.' : 'Toque num livro pra escolher a fileira e a posição, ou use “Arrumar”.'} “Ordenar” põe a lista por autor, título ou categoria.</div>`;
+    h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? i + 1 : '')).join('') : `<div class="emptycol">${w ? (drag ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia. Use “Arrumar” ou toque num livro pra trazer ele pra cá.') : 'Fileira vazia.'}</div>`}</div></section>`;
   });
   return h + '</div>';
 }
@@ -223,7 +227,7 @@ function drawEditorDynamic() {
   else if (isNew && !b.shelf) h += `<p class="hint">Escreva o autor ou escolha a categoria que eu sugiro a estante.</p>`;
   if (b.shelf) {
     h += `<div class="field"><span>Fileira</span><div class="chips" id="edRow"><button class="chip ${!b.row ? 'on' : ''}" data-row="0" ${ro ? 'disabled' : ''}>Sem fileira</button>${Array.from({ length: n }, (_, i) => `<button class="chip ${b.row === i + 1 ? 'on' : ''}" data-row="${i + 1}" ${ro ? 'disabled' : ''}>${i + 1}</button>`).join('')}</div></div>`;
-    if (b.row) h += `<div class="field"><span>Posição na fileira, contando da esquerda</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${b.index + 1}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${len + 1}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
+    h += `<div class="field"><span>${b.row ? 'Posição na fileira, contando da esquerda' : 'Posição na lista do Sem fileira'}</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${b.index + 1}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${len + 1}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
     if (sug && !ro) h += `<div class="sug"><div>Posição pela ordem A–Z: ${sug.text}</div><button class="btn" id="useSuggestion">Usar essa posição</button></div>`;
   }
   if (!ro) {
@@ -254,7 +258,7 @@ async function saveEditor() {
   if (!b.category) { toast('Escolha uma categoria.'); $('#edC').focus(); return; }
   if (!b.shelf) { toast('Escolha em qual estante ele fica.'); return; }
   b.title = b.title.trim(); b.author = b.author.trim(); b.note = (b.note || '').trim(); b.series = (b.series || '').trim(); if (!b.series) b.volume = 0;
-  const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = isNew && !row ? 1e9 : (b.index || 0);
+  const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = b.index || 0;
   const btn = $('#save'); btn.disabled = true; btn.textContent = 'Salvando…';
   try {
     if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
@@ -338,9 +342,9 @@ async function sortUnplaced(mode) {
 }
 
 /* ---------- drag and drop (mouse and touch, no library) ---------- */
-// Touch: hold a book for 300 ms, then drag. Mouse: press and move a few pixels.
+// Mouse only: press a book and move a few pixels to start dragging.
 // While dragging, a bar at the bottom offers every row of this shelf and every other shelf.
-const DRAG = { active: false, candidate: null, timer: null, endedAt: 0 };
+const DRAG = { active: false, candidate: null, endedAt: 0 };
 function dropZonesHtml() {
   const n = rowLists(S.current).length - 1;
   const here = [`<button class="zone" data-zone="${esc(S.current)}|0">Sem fileira</button>`].concat(Array.from({ length: n }, (_, i) => `<button class="zone" data-zone="${esc(S.current)}|${i + 1}">Fileira ${i + 1}</button>`)).join('');
@@ -408,25 +412,18 @@ async function endDrag(cancelled) {
   } catch (e) { render(); toast(errorMessage(e)); }
 }
 document.addEventListener('pointerdown', e => {
-  if (DRAG.active || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  if (DRAG.active || e.pointerType !== 'mouse' || e.button !== 0) return;
   const el = e.target.closest('.drop .book'); if (!el || !canEdit() || S.query) return;
   const b = S.byId[el.dataset.id]; if (b) b._startIndex = locate(b).index;
-  DRAG.candidate = { el, id: el.dataset.id, x: e.clientX, y: e.clientY, type: e.pointerType };
-  clearTimeout(DRAG.timer);
-  if (e.pointerType !== 'mouse') DRAG.timer = setTimeout(startDrag, 300);
+  DRAG.candidate = { el, id: el.dataset.id, x: e.clientX, y: e.clientY };
 });
 document.addEventListener('pointermove', e => {
   if (DRAG.active) { moveDrag(e.clientX, e.clientY); return; }
   const c = DRAG.candidate; if (!c) return;
-  const dist = Math.hypot(e.clientX - c.x, e.clientY - c.y);
-  if (c.type === 'mouse') { if (dist > 6) { c.x = e.clientX; c.y = e.clientY; startDrag(); } }
-  else if (dist > 10) { clearTimeout(DRAG.timer); DRAG.candidate = null; } // the finger is scrolling, not dragging
+  if (Math.hypot(e.clientX - c.x, e.clientY - c.y) > 6) { c.x = e.clientX; c.y = e.clientY; startDrag(); }
 });
-// Once a drag has started, keep the page from scrolling under the finger.
-document.addEventListener('touchmove', e => { if (DRAG.active) e.preventDefault(); }, { passive: false });
-document.addEventListener('pointerup', () => { clearTimeout(DRAG.timer); if (DRAG.active) endDrag(false); DRAG.candidate = null; });
-document.addEventListener('pointercancel', () => { clearTimeout(DRAG.timer); if (DRAG.active) endDrag(true); DRAG.candidate = null; });
-document.addEventListener('contextmenu', e => { if (e.target.closest('.drop .book')) e.preventDefault(); });
+document.addEventListener('pointerup', () => { if (DRAG.active) endDrag(false); DRAG.candidate = null; });
+document.addEventListener('pointercancel', () => { if (DRAG.active) endDrag(true); DRAG.candidate = null; });
 
 /* ---------- shelves: create, edit, rows ---------- */
 function openShelfEditor(id) {
