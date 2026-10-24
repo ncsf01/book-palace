@@ -35,8 +35,6 @@ Then open `http://localhost:8000`. Double-clicking `index.html` doesn't work, be
 
 ## Put it online with your own stock
 
-About 15 minutes, once.
-
 ### 1. Create the Firebase project
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com) with your Google account and click **Create a project**. Google Analytics can stay off.
@@ -62,7 +60,7 @@ About 15 minutes, once.
 2. Under **Sign-in method**, enable **Google** and save.
 3. Under **Settings > Authorized domains**, add your GitHub Pages domain, for example `your-user.github.io`.
 
-### 3. Create the database and allow your family's e-mails
+### 3. Create the database and allow the e-mails
 
 1. In the menu, open **Firestore Database** and click **Create database**. Pick a location close to you (for Brazil, `southamerica-east1 (São Paulo)`) and **production mode**.
 2. Open the **Rules** tab, delete what is there and paste the contents of [`firestore.rules`](firestore.rules).
@@ -133,10 +131,6 @@ js/sort.js            A–Z order by author
 data/sample.json      demo mode books
 firestore.rules       who can read and edit
 ```
-
-## Contributing
-
-Issues and pull requests are welcome. Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, …).
 
 ## License
 
