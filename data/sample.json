@@ -48,18 +48,18 @@
      "row": 0
     },
     {
-     "id": "e6",
-     "title": "Memórias Póstumas de Brás Cubas",
-     "author": "Machado de Assis",
-     "category": "ROM",
-     "copies": 1,
-     "row": 0
-    },
-    {
      "id": "e7",
      "title": "Anjos e Demônios",
      "author": "Dan Brown",
      "category": "SUS",
+     "copies": 1,
+     "row": 0
+    },
+    {
+     "id": "e6",
+     "title": "Memórias Póstumas de Brás Cubas",
+     "author": "Machado de Assis",
+     "category": "ROM",
      "copies": 1,
      "row": 0
     }
@@ -99,17 +99,17 @@
      "row": 2
     },
     {
-     "id": "e11",
-     "title": "Sapiens: Uma Breve História da Humanidade",
-     "author": "Yuval Noah Harari",
+     "id": "e12",
+     "title": "1808",
+     "author": "Laurentino Gomes",
      "category": "HIS",
      "copies": 1,
      "row": 0
     },
     {
-     "id": "e12",
-     "title": "1808",
-     "author": "Laurentino Gomes",
+     "id": "e11",
+     "title": "Sapiens: Uma Breve História da Humanidade",
+     "author": "Yuval Noah Harari",
      "category": "HIS",
      "copies": 1,
      "row": 0
