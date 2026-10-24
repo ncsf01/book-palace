@@ -127,8 +127,8 @@ footer.foot{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items
 .field>span{font-size:13px;font-weight:600;color:var(--muted)}
 .field input,.field select{width:100%;border:1px solid var(--line);background:var(--soft2);border-radius:10px;padding:12px;font-size:16px;color:var(--fg)}
 .row2{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;min-height:38px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:8px 11px;min-width:36px;font-size:14px;font-weight:600;min-height:38px}
 .chip.on{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}
 .stepper{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .row2 .stepper{flex-wrap:nowrap}
@@ -154,3 +154,8 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .sortopt b{font-size:15px}
 .sortopt span{color:var(--muted);font-size:13px}
 .sortopt:active{background:var(--soft)}
+.savebar{position:sticky;bottom:calc(-19px - env(safe-area-inset-bottom,0px));z-index:2;margin:12px calc(-1 * var(--gutR)) calc(-19px - env(safe-area-inset-bottom,0px)) calc(-1 * var(--gutL));padding:10px var(--gutR) calc(env(safe-area-inset-bottom,0px) + 12px) var(--gutL);background:var(--bg);border-top:1px solid var(--line)}
+.savebar:empty{display:none}
+.savebar .btn.blue{width:100%;padding:14px;font-size:16px}
+.sumv{color:var(--muted);font-weight:400}
+.sug.small{padding:10px 12px;gap:6px;font-size:13px}

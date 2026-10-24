@@ -194,7 +194,8 @@ function drawEditor() {
   h += `<label class="field"><span>Título</span><input id="edT" value="${esc(b.title)}" ${ro ? 'disabled' : ''} placeholder="Como está na capa"></label>`;
   h += `<label class="field"><span>Autor</span><input id="edA" list="authors" value="${esc(b.author)}" ${ro ? 'disabled' : ''} placeholder="Nome como está na capa"><datalist id="authors">${authors.map(a => `<option value="${esc(a)}"></option>`).join('')}</datalist></label><div id="edDup"></div>`;
   h += `<div class="row2"><label class="field"><span>Categoria</span><select id="edC" ${ro ? 'disabled' : ''}>${catOptions}</select></label><div class="field"><span>Exemplares</span><div class="stepper"><button class="sb" id="qMinus" ${ro ? 'disabled' : ''} aria-label="Menos um exemplar">−</button><span class="val" id="qVal">${b.copies || 1}</span><button class="sb" id="qPlus" ${ro ? 'disabled' : ''} aria-label="Mais um exemplar">+</button></div></div></div>`;
-  h += `<details class="more" ${b.note || b.series ? 'open' : ''}><summary>Observação e série</summary><label class="field"><span>Observação</span><input id="edN" value="${esc(b.note || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: lacrado, capa diferente, edição de bolso"></label><div class="row2"><label class="field"><span>Série ou coleção</span><input id="edS" value="${esc(b.series || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: Millennium"></label><label class="field"><span>Volume</span><input id="edV" type="number" min="1" inputmode="numeric" value="${b.volume || ''}" ${ro ? 'disabled' : ''}></label></div></details><div id="edDyn"></div></div></div>`;
+  const extra = [b.note, b.series && (b.series + (b.volume ? ' ' + b.volume : ''))].filter(Boolean).join(' · ');
+  h += `<details class="more"><summary>Observação e série${extra ? `: <span class="sumv">${esc(extra)}</span>` : ''}</summary><label class="field"><span>Observação</span><input id="edN" value="${esc(b.note || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: lacrado, capa diferente, edição de bolso"></label><div class="row2"><label class="field"><span>Série ou coleção</span><input id="edS" value="${esc(b.series || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: Millennium"></label><label class="field"><span>Volume</span><input id="edV" type="number" min="1" inputmode="numeric" value="${b.volume || ''}" ${ro ? 'disabled' : ''}></label></div></details><div id="edDyn"></div><div class="savebar" id="edBar"></div></div></div>`;
   $('#layer').innerHTML = h;
   const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); }); $('#close').onclick = closeLayer;
   let typingTimer = null;
@@ -228,14 +229,11 @@ function drawEditorDynamic() {
   if (b.shelf) {
     h += `<div class="field"><span>Fileira</span><div class="chips" id="edRow"><button class="chip ${!b.row ? 'on' : ''}" data-row="0" ${ro ? 'disabled' : ''}>Sem fileira</button>${Array.from({ length: n }, (_, i) => `<button class="chip ${b.row === i + 1 ? 'on' : ''}" data-row="${i + 1}" ${ro ? 'disabled' : ''}>${i + 1}</button>`).join('')}</div></div>`;
     h += `<div class="field"><span>${b.row ? 'Posição na fileira, contando da esquerda' : 'Posição na lista do Sem fileira'}</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${b.index + 1}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${len + 1}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
-    if (sug && !ro) h += `<div class="sug"><div>Posição pela ordem A–Z: ${sug.text}</div><button class="btn" id="useSuggestion">Usar essa posição</button></div>`;
+    if (sug && !ro) h += `<div class="sug small"><div>Pela ordem A–Z: ${sug.text}</div><button class="btn" id="useSuggestion">Usar essa posição</button></div>`;
   }
-  if (!ro) {
-    h += `<div class="sheetf"><button class="btn blue" id="save">${isNew ? 'Adicionar ao estoque' : 'Salvar'}</button>`;
-    if (!isNew) h += ED.confirmDelete ? `<div class="confirm">Tirar este livro do estoque? <button class="btn" id="deleteYes" style="color:var(--red)">Sim, tirar</button><button class="btn" id="deleteNo">Não</button></div>` : `<button class="btn danger" id="delete">Tirar do estoque (vendido ou doado)</button>`;
-    h += '</div>';
-  }
+  if (!ro && !isNew) h += `<div class="sheetf">${ED.confirmDelete ? `<div class="confirm">Tirar este livro do estoque? <button class="btn" id="deleteYes" style="color:var(--red)">Sim, tirar</button><button class="btn" id="deleteNo">Não</button></div>` : `<button class="btn danger" id="delete">Tirar do estoque (vendido ou doado)</button>`}</div>`;
   $('#edDyn').innerHTML = h;
+  $('#edBar').innerHTML = ro ? '' : `<button class="btn blue" id="save">${isNew ? 'Adicionar ao estoque' : 'Salvar'}</button>`;
   const on = (id, fn) => { const el = $('#' + id); if (el) el.onclick = fn; };
   const applySuggestion = () => { const s = suggestPosition(b, b.shelf); b.row = s.row; b.index = s.index; };
   on('addCopy', async () => { const d = S.byId[$('#addCopy').dataset.id]; closeLayer(); try { await updateShelf(d.shelf, doc => { const x = doc.books.find(y => y.id === d.id); if (x) x.copies = (x.copies || 1) + 1; return doc; }); toast(`Agora são ${(d.copies || 1) + 1} exemplares de ${d.title}.`); } catch (e) { toast(errorMessage(e)); } });
@@ -280,7 +278,7 @@ function drawArrange() {
   h += `<div class="seg" role="group" aria-label="Como colocar" style="margin-bottom:10px"><button data-arrange-mode="upto" class="${mode === 'upto' ? 'on' : ''}">Até este livro</button><button data-arrange-mode="one" class="${mode === 'one' ? 'on' : ''}">Um por um</button></div>`;
   h += `<p class="hint">${mode === 'upto' ? `Se os livros da fileira ${row} estão na mesma ordem desta lista, toque no <b>último</b> deles. Ele e todos os de cima vão pra lá, nessa ordem.` : `Olhe a fileira ${row} da esquerda pra direita e toque em cada livro na mesma ordem. Cada toque coloca o livro no fim da fileira.`} A fileira ${row} já tem ${countCopies(lists[row] || [])} livros.</p>`;
   h += unplaced.length ? `<div class="list arrlist">${unplaced.map((b, i) => bookButton(b, i + 1)).join('')}</div>` : `<div class="state"><p>Todos os livros desta estante já estão numa fileira.</p></div>`;
-  h += `<div class="sheetf"><button class="btn blue" id="done">Pronto</button></div></div></div>`;
+  h += `<div class="savebar"><button class="btn blue" id="done">Pronto</button></div></div></div>`;
   const scroll = $('#ov .sheet') ? $('#ov .sheet').scrollTop : 0;
   $('#layer').innerHTML = h; $('#ov .sheet').scrollTop = scroll;
   const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); });
