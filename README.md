@@ -6,7 +6,7 @@ A simple, phone-first web app to manage a stock of books shelf by shelf, row by 
 
 It runs in the browser with nothing to install and can be hosted for free on **GitHub Pages**. The data lives in a **Firebase** database (free plan), with Google sign-in.
 
-> The app's screens are in Brazilian Portuguese. The code and its comments are in English.
+> The app's screens are in Brazilian Portuguese, where it is called *Palácio dos Livros*. The code and its comments are in English.
 
 ## Features
 

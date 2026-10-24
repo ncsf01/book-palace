@@ -1,6 +1,6 @@
 {
-  "name": "Estoque de Livros",
-  "short_name": "Estoque",
+  "name": "Palácio dos Livros",
+  "short_name": "Palácio dos Livros",
   "description": "Controle de estoque de livros por estante, fileira e posição.",
   "lang": "pt-BR",
   "start_url": "./",

@@ -6,7 +6,7 @@ Um app simples, feito pra usar no celular, que controla um estoque de livros est
 
 Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de graça no **GitHub Pages**. Os dados ficam num banco **Firebase** (plano gratuito), com login pela conta Google.
 
-> As telas do app são em português. O código e os comentários são em inglês.
+> As telas do app são em português, onde ele se chama *Palácio dos Livros*. O código e os comentários são em inglês.
 
 ## O que ele faz
 
