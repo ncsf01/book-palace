@@ -1,0 +1,47 @@
+<!doctype html>
+<!--
+  SPDX-License-Identifier: AGPL-3.0-or-later
+  Book Palace, Copyright (C) 2026 ncsf01 (https://github.com/ncsf01/book-palace)
+  Keep the "Book Palace" credit at the bottom of the page: it is required by the
+  license's additional terms (see NOTICE).
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Estoque de Livros</title>
+<meta name="description" content="Controle de estoque de livros por estante, fileira e posição, com busca, ordem A–Z e arrastar e soltar.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grand+Hotel&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="toprow">
+    <h1 class="brand">Estoque de Livros</h1>
+    <div class="topright"><span class="total" id="total"></span><button class="account" id="account" aria-label="Sua conta" hidden></button></div>
+  </div>
+  <div class="search" id="searchbox" hidden>
+    <input id="q" type="search" placeholder="Procurar título ou autor" autocomplete="off" aria-label="Procurar título ou autor">
+    <button class="clear" id="qclear" aria-label="Limpar busca" hidden>×</button>
+  </div>
+</header>
+<main class="wrap">
+  <nav class="stories" id="stories" aria-label="Estantes"></nav>
+  <section id="main" aria-live="polite"><div class="state"><h2>Abrindo o estoque…</h2><p>Os livros aparecem aqui em instantes.</p></div></section>
+  <div class="legend" id="legend"></div>
+  <footer class="foot" id="foot"></footer>
+  <p class="credit">Feito com o <a href="https://github.com/ncsf01/book-palace" target="_blank" rel="noopener">Book Palace</a>, de ncsf01 · código aberto (AGPL-3.0)</p>
+</main>
+<button class="fab" id="fab" hidden>+ Livro</button>
+<div id="dropbar" class="dropbar" hidden></div>
+<div id="layer"></div>
+<input type="file" id="file" accept="application/json,.json" hidden>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

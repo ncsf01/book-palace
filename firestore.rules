@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Book Palace, Copyright (C) 2026 ncsf01 (https://github.com/ncsf01/book-palace)
+//
+// Firestore security rules.
+// Only the Google accounts listed below can read and edit the inventory.
+// After editing, publish them in: Firebase Console > Firestore Database > Rules > Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'your-email@gmail.com',
+          'another-email@gmail.com'
+        ];
+    }
+
+    match /shelves/{shelf} {
+      allow read, write: if isAllowed();
+    }
+  }
+}

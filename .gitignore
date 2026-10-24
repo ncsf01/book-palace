@@ -1,0 +1,6 @@
+# Inventory backups and exports (keep your own data out of the repository)
+book-palace-*.json
+book-palace-*.csv
+book-palace-initial.json
+estoque-*.json
+.DS_Store

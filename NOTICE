@@ -1,0 +1,43 @@
+Book Palace
+Copyright (C) 2026 ncsf01 <https://github.com/ncsf01>
+https://github.com/ncsf01/book-palace
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program, in the LICENSE file. If not, see
+<https://www.gnu.org/licenses/>.
+
+
+ADDITIONAL TERMS (section 7 of the GNU Affero General Public License v3)
+
+The following additional terms apply to this program and to every copy,
+modified version or work based on it.
+
+1. Attribution (section 7(b)).
+   a) Keep this NOTICE file and the copyright notices at the top of the
+      source files.
+   b) The user interface must show, as part of its Appropriate Legal Notices
+      and in a place users can reasonably see (such as the page footer), a
+      credit that names "Book Palace" and "ncsf01" and links to
+      https://github.com/ncsf01/book-palace.
+      For a modified version, use "Based on Book Palace by ncsf01".
+      The credit may be translated into the language of the user interface,
+      for example in Portuguese: "Baseado no Book Palace, de ncsf01".
+
+2. Origin (section 7(c)). A modified version must not be presented as the
+   original Book Palace or as made or endorsed by ncsf01, and must be marked
+   as different from the original, for example with the credit in item 1(b).
+
+3. Name (section 7(e)). This license grants no right to use the name
+   "Book Palace" as the name of a modified version, product or service.
+   The name may only be used to give the credit above and to describe the
+   origin of the work truthfully.

@@ -1,0 +1,152 @@
+{
+ "app": "book-palace",
+ "version": 1,
+ "shelves": {
+  "sala": {
+   "name": "Sala",
+   "order": 0,
+   "rows": 3,
+   "books": [
+    {
+     "id": "e1",
+     "title": "O Código Da Vinci",
+     "author": "Dan Brown",
+     "category": "SUS",
+     "copies": 3,
+     "row": 1
+    },
+    {
+     "id": "e2",
+     "title": "Inferno",
+     "author": "Dan Brown",
+     "category": "SUS",
+     "copies": 1,
+     "row": 1
+    },
+    {
+     "id": "e3",
+     "title": "Dom Casmurro",
+     "author": "Machado de Assis",
+     "category": "ROM",
+     "copies": 2,
+     "row": 1
+    },
+    {
+     "id": "e4",
+     "title": "O Alquimista",
+     "author": "Paulo Coelho",
+     "category": "ROM",
+     "copies": 1,
+     "row": 2
+    },
+    {
+     "id": "e5",
+     "title": "O Cortiço",
+     "author": "Aluísio Azevedo",
+     "category": "ROM",
+     "copies": 1,
+     "row": 0
+    },
+    {
+     "id": "e6",
+     "title": "Memórias Póstumas de Brás Cubas",
+     "author": "Machado de Assis",
+     "category": "ROM",
+     "copies": 1,
+     "row": 0
+    },
+    {
+     "id": "e7",
+     "title": "Anjos e Demônios",
+     "author": "Dan Brown",
+     "category": "SUS",
+     "copies": 1,
+     "row": 0
+    }
+   ]
+  },
+  "quarto": {
+   "name": "Quarto",
+   "order": 1,
+   "rows": 2,
+   "books": [
+    {
+     "id": "e8",
+     "title": "Harry Potter e a Pedra Filosofal",
+     "author": "J. K. Rowling",
+     "category": "FAN",
+     "copies": 2,
+     "row": 1,
+     "series": "Harry Potter",
+     "volume": 1
+    },
+    {
+     "id": "e9",
+     "title": "Harry Potter e a Câmara Secreta",
+     "author": "J. K. Rowling",
+     "category": "FAN",
+     "copies": 1,
+     "row": 1,
+     "series": "Harry Potter",
+     "volume": 2
+    },
+    {
+     "id": "e10",
+     "title": "O Pequeno Príncipe",
+     "author": "Antoine de Saint-Exupéry",
+     "category": "ROM",
+     "copies": 1,
+     "row": 2
+    },
+    {
+     "id": "e11",
+     "title": "Sapiens: Uma Breve História da Humanidade",
+     "author": "Yuval Noah Harari",
+     "category": "HIS",
+     "copies": 1,
+     "row": 0
+    },
+    {
+     "id": "e12",
+     "title": "1808",
+     "author": "Laurentino Gomes",
+     "category": "HIS",
+     "copies": 1,
+     "row": 0
+    }
+   ]
+  },
+  "escritorio": {
+   "name": "Escritório",
+   "order": 2,
+   "rows": 2,
+   "books": [
+    {
+     "id": "e13",
+     "title": "Quem Mexeu no Meu Queijo?",
+     "author": "Spencer Johnson",
+     "category": "ADM",
+     "copies": 2,
+     "row": 1
+    },
+    {
+     "id": "e14",
+     "title": "O Monge e o Executivo",
+     "author": "James C. Hunter",
+     "category": "ADM",
+     "copies": 1,
+     "row": 1,
+     "note": "capa diferente"
+    },
+    {
+     "id": "e15",
+     "title": "Pai Rico, Pai Pobre",
+     "author": "Robert T. Kiyosaki",
+     "category": "ADM",
+     "copies": 1,
+     "row": 0
+    }
+   ]
+  }
+ }
+}
