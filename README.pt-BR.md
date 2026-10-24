@@ -34,8 +34,6 @@ Depois abra `http://localhost:8000`. Abrir o `index.html` direto, com dois cliqu
 
 ## Como colocar no ar com o seu estoque
 
-São uns 15 minutos, uma vez só.
-
 ### 1. Crie o projeto no Firebase
 
 1. Entre em [console.firebase.google.com](https://console.firebase.google.com) com a sua conta Google e clique em **Criar um projeto**. O Google Analytics pode ficar desligado.
@@ -61,7 +59,7 @@ São uns 15 minutos, uma vez só.
 2. Em **Método de login**, ative o **Google** e salve.
 3. Em **Configurações > Domínios autorizados**, adicione o endereço do seu GitHub Pages, por exemplo `seu-usuario.github.io`.
 
-### 3. Crie o banco e libere os e-mails da família
+### 3. Crie o banco e libere os e-mails
 
 1. No menu, vá em **Firestore Database** e clique em **Criar banco de dados**. Escolha o local `southamerica-east1 (São Paulo)` e o **modo de produção**.
 2. Abra a aba **Regras**, apague o que estiver lá e cole o conteúdo do arquivo [`firestore.rules`](firestore.rules).
@@ -134,10 +132,6 @@ js/sort.js            ordem A–Z por autor
 data/sample.json      livros do modo demonstração
 firestore.rules       quem pode ver e editar
 ```
-
-## Contribuir
-
-Issues e pull requests são bem-vindos. As mensagens de commit seguem o [Conventional Commits](https://www.conventionalcommits.org/pt-br/), em inglês (`feat:`, `fix:`, `docs:`, …).
 
 ## Licença
 
