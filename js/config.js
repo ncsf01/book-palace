@@ -11,7 +11,15 @@
 // 2) Leave FIREBASE_CONFIG = null to run in DEMO MODE: no sign-in, sample books,
 //    and everything is stored only in this browser. Handy for trying the project out.
 
-export const FIREBASE_CONFIG = null;
+export const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD6TfAZfMJVi2Yy2lkavoc0DQyExgiWXV4",
+  authDomain: "book-palace-74810.firebaseapp.com",
+  projectId: "book-palace-74810",
+  storageBucket: "book-palace-74810.firebasestorage.app",
+  messagingSenderId: "1086677562011",
+  appId: "1:1086677562011:web:f80f9a6577ffe43eaa4c3e",
+  measurementId: "G-271LMB0MVW"
+};
 /* Example:
 export const FIREBASE_CONFIG = {
   apiKey: "AIza...",
