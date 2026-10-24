@@ -8,6 +8,8 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 
 > The app's screens are in Brazilian Portuguese, where it is called *Palácio dos Livros*. The code and its comments are in English.
 
+<p align="center"><img src="docs/demo.gif" width="300" alt="The app on a phone, in demo mode: switching shelves, putting a book on a row, the A–Z view, searching and adding a new book"></p>
+
 ## Features
 
 - **Shelves as "stories"**: each shelf shows up at the top, with its book count.
@@ -130,6 +132,7 @@ js/store.js           Firebase and demo mode
 js/sort.js            A–Z order by author
 data/sample.json      demo mode books
 firestore.rules       who can read and edit
+docs/demo.gif         the animation at the top of this page
 ```
 
 ## License

@@ -8,6 +8,8 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 
 > As telas do app são em português, onde ele se chama *Palácio dos Livros*. O código e os comentários são em inglês.
 
+<p align="center"><img src="docs/demo.gif" width="300" alt="O app no celular, no modo demonstração: trocando de estante, colocando um livro numa fileira, a ordem A–Z, a busca e um livro novo"></p>
+
 ## O que ele faz
 
 - **Estantes como "stories"**: cada estante aparece no topo com o número de livros dela.
@@ -132,6 +134,7 @@ js/store.js           Firebase e modo demonstração
 js/sort.js            ordem A–Z por autor
 data/sample.json      livros do modo demonstração
 firestore.rules       quem pode ver e editar
+docs/demo.gif         a animação do começo desta página
 ```
 
 ## Licença
