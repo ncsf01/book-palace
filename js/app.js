@@ -33,18 +33,17 @@ function rebuild() {
   if (!S.current || !S.shelves[S.current]) S.current = list.length ? (list.find(s => s.name.toLowerCase().includes('amarela')) || list[0]).id : null;
 }
 const byKey = (a, b) => compareKeys(a._key, b._key);
-// Returns [unplaced, row 1, row 2, ...] for a shelf. Unplaced books come in A–Z order.
+// Returns [unplaced, row 1, row 2, ...] for a shelf, each list in the order its books are saved.
 function rowLists(shelfId, excludeId) {
   const d = S.shelves[shelfId] || { rows: 1, books: [] }; const n = Math.max(1, d.rows || 1);
   const lists = Array.from({ length: n + 1 }, () => []);
   (d.books || []).forEach(raw => { if (raw.id === excludeId) return; const b = S.byId[raw.id] || raw; const r = (b.row >= 1 && b.row <= n) ? b.row : (b.row > n ? n : 0); lists[r].push(b); });
-  lists[0].sort(byKey);
   return lists;
 }
 function locate(b) {
-  const lists = rowLists(b.shelf); const row = lists.findIndex((l, i) => i > 0 && l.some(x => x.id === b.id));
-  if (row < 1) return { row: 0, index: -1, text: shelfName(b.shelf) + ' · sem fileira' };
+  const lists = rowLists(b.shelf); const row = Math.max(0, lists.findIndex(l => l.some(x => x.id === b.id)));
   const index = lists[row].findIndex(x => x.id === b.id);
+  if (!row) return { row: 0, index, text: shelfName(b.shelf) + ' · sem fileira' };
   return { row, index, text: `${shelfName(b.shelf)} · fileira ${row} · ${index + 1}º` };
 }
 
@@ -77,10 +76,9 @@ const emptyShelf = () => ({ name: 'Estante', order: 999, rows: DEFAULT_ROWS, boo
 async function updateShelf(id, fn) { await S.store.update([id], ([d]) => { const cur = d || emptyShelf(); if (!Array.isArray(cur.books)) cur.books = []; return [fn(cur) || cur]; }); }
 async function updateTwoShelves(a, b, fn) { await S.store.update([a, b], ([da, db]) => fn(da || emptyShelf(), db || emptyShelf())); }
 function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } return o; }
-// Inserts a book into a shelf's array at position `index` of row `row`.
+// Inserts a book into a shelf's array at position `index` of row `row` (row 0 = unplaced).
 function insertBook(list, book, row, index) {
   book = cleanBook({ ...book, row });
-  if (!row) { list.push(book); return; }
   const slots = []; list.forEach((x, i) => { if ((x.row || 0) === row) slots.push(i); });
   if (index < slots.length) list.splice(slots[index], 0, book);
   else if (slots.length) list.splice(slots[slots.length - 1] + 1, 0, book);
@@ -131,8 +129,8 @@ function renderShelf() {
   h += `<div class="jump" role="group" aria-label="Ir pra fileira">${cols.map(r => `<button class="pill" data-jump="${r}">${r ? 'Fileira ' + r : 'Sem fileira'} · <b>${countCopies(lists[r])}</b></button>`).join('')}</div><div class="board" id="board">`;
   cols.forEach(r => {
     const l = lists[r];
-    h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${countCopies(l)} livros</span></h3>${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</div>`;
-    if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira, em ordem A–Z. Arraste cada um pra fileira certa, ou use “Arrumar” pra ir tocando neles na ordem da estante.</div>`;
+    h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${countCopies(l)} livros</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
+    if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira. Arraste pra mudar a ordem ou pra levar até uma fileira. “Ordenar” põe a lista por autor, título ou categoria.</div>`;
     h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? i + 1 : '')).join('') : `<div class="emptycol">${w ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia.'}</div>`}</div></section>`;
   });
   return h + '</div>';
@@ -183,7 +181,7 @@ function openEditor(id) {
   ED = { isNew, original: isNew ? null : { shelf: b.shelf }, b, confirmDelete: false, manualPlace: !isNew };
   drawEditor();
 }
-const editorRowLength = () => { const b = ED.b; if (!b.shelf || !b.row) return 0; return (rowLists(b.shelf, b.id)[b.row] || []).length; };
+const editorRowLength = () => { const b = ED.b; if (!b.shelf) return 0; return (rowLists(b.shelf, b.id)[b.row || 0] || []).length; };
 function drawEditor() {
   const { b, isNew } = ED; const ro = !canEdit();
   const catOptions = `<option value="">Escolha…</option>` + Object.entries(CATEGORIES).map(([k, [nm]]) => `<option value="${k}" ${b.category === k ? 'selected' : ''}>${esc(nm)}</option>`).join('');
@@ -256,7 +254,7 @@ async function saveEditor() {
   if (!b.category) { toast('Escolha uma categoria.'); $('#edC').focus(); return; }
   if (!b.shelf) { toast('Escolha em qual estante ele fica.'); return; }
   b.title = b.title.trim(); b.author = b.author.trim(); b.note = (b.note || '').trim(); b.series = (b.series || '').trim(); if (!b.series) b.volume = 0;
-  const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = b.index || 0;
+  const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = isNew && !row ? 1e9 : (b.index || 0);
   const btn = $('#save'); btn.disabled = true; btn.textContent = 'Salvando…';
   try {
     if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
@@ -276,7 +274,7 @@ function drawArrange() {
   let h = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="arTitle"><div class="grab"></div><div class="sheeth"><h2 id="arTitle">Arrumar · ${esc(shelfName(shelf))}</h2><button class="x" id="close" aria-label="Fechar">×</button></div>`;
   h += `<div class="field"><span>Colocar na fileira</span><div class="chips">${Array.from({ length: n }, (_, i) => `<button class="chip ${row === i + 1 ? 'on' : ''}" data-target-row="${i + 1}">${i + 1}</button>`).join('')}</div></div>`;
   h += `<div class="seg" role="group" aria-label="Como colocar" style="margin-bottom:10px"><button data-arrange-mode="upto" class="${mode === 'upto' ? 'on' : ''}">Até este livro</button><button data-arrange-mode="one" class="${mode === 'one' ? 'on' : ''}">Um por um</button></div>`;
-  h += `<p class="hint">${mode === 'upto' ? `Se você já arrumou a estante na ordem A–Z, toque no <b>último livro</b> da fileira ${row}. Ele e todos os de cima vão pra lá, nessa ordem.` : `Olhe a fileira ${row} da esquerda pra direita e toque em cada livro na mesma ordem. Cada toque coloca o livro no fim da fileira.`} A fileira ${row} já tem ${countCopies(lists[row] || [])} livros.</p>`;
+  h += `<p class="hint">${mode === 'upto' ? `Se os livros da fileira ${row} estão na mesma ordem desta lista, toque no <b>último</b> deles. Ele e todos os de cima vão pra lá, nessa ordem.` : `Olhe a fileira ${row} da esquerda pra direita e toque em cada livro na mesma ordem. Cada toque coloca o livro no fim da fileira.`} A fileira ${row} já tem ${countCopies(lists[row] || [])} livros.</p>`;
   h += unplaced.length ? `<div class="list arrlist">${unplaced.map((b, i) => bookButton(b, i + 1)).join('')}</div>` : `<div class="state"><p>Todos os livros desta estante já estão numa fileira.</p></div>`;
   h += `<div class="sheetf"><button class="btn blue" id="done">Pronto</button></div></div></div>`;
   const scroll = $('#ov .sheet') ? $('#ov .sheet').scrollTop : 0;
@@ -292,11 +290,51 @@ async function arrangeTap(id) {
   if (busy || !AR) return; busy = true;
   const { shelf, row, mode } = AR; const unplaced = rowLists(shelf)[0]; const at = unplaced.findIndex(b => b.id === id);
   const ids = mode === 'upto' ? unplaced.slice(0, at + 1).map(b => b.id) : [id];
+  const startAt = mode === 'upto' ? 0 : at; // where they were in the unplaced list, for "Desfazer"
   try {
     await updateShelf(shelf, d => { const picked = ids.map(i => d.books.find(x => x.id === i)).filter(Boolean); d.books = d.books.filter(x => !ids.includes(x.id)); picked.forEach(p => insertBook(d.books, p, row, 1e9)); return d; });
-    toast(ids.length > 1 ? `${ids.length} livros foram pra fileira ${row}.` : `${(S.byId[id] || {}).title || 'Livro'} foi pra fileira ${row}.`, 'Desfazer', async () => { try { await updateShelf(shelf, d => { d.books.forEach(x => { if (ids.includes(x.id)) x.row = 0; }); return d; }); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); } });
+    toast(ids.length > 1 ? `${ids.length} livros foram pra fileira ${row}.` : `${(S.byId[id] || {}).title || 'Livro'} foi pra fileira ${row}.`, 'Desfazer', async () => { try { await updateShelf(shelf, d => { const back = ids.map(i => d.books.find(x => x.id === i)).filter(Boolean); d.books = d.books.filter(x => !ids.includes(x.id)); back.forEach((p, k) => insertBook(d.books, p, 0, startAt + k)); return d; }); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); } });
   } catch (e) { toast(errorMessage(e)); }
   busy = false;
+}
+
+/* ---------- sort the unplaced list ---------- */
+// Sorting rewrites the saved order of the unplaced books once; they can still be dragged afterwards.
+// Rows are never sorted: their order is the order of the books on the real shelf.
+const SORTS = {
+  author: ['Autor (A–Z)', 'Pelo nome do autor como está na capa. Séries ficam juntas.', 'autor'],
+  title: ['Título (A–Z)', 'Ignora “O”, “A”, “Os”… no começo do título.', 'título'],
+  category: ['Categoria', 'Na ordem da legenda. Dentro de cada categoria, por autor.', 'categoria'],
+};
+function sortCompare(mode) {
+  if (mode === 'title') return (a, b) => titleKey(a.title).localeCompare(titleKey(b.title), 'pt') || byKey(a, b);
+  if (mode === 'category') {
+    const order = Object.keys(CATEGORIES); const at = c => { const i = order.indexOf(c); return i < 0 ? order.length : i; };
+    return (a, b) => at(a.category) - at(b.category) || byKey(a, b);
+  }
+  return byKey;
+}
+// Puts a shelf's unplaced books in the order of `ids` (books not in `ids` go last, as they were).
+async function reorderUnplaced(shelfId, ids) {
+  const pos = new Map(ids.map((id, i) => [id, i])); const rank = x => (pos.has(x.id) ? pos.get(x.id) : ids.length);
+  await updateShelf(shelfId, d => { const placed = d.books.filter(x => x.row >= 1); const loose = d.books.filter(x => !(x.row >= 1)).sort((a, b) => rank(a) - rank(b)); d.books = placed.concat(loose); return d; });
+}
+function openSortUnplaced() {
+  let h = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="soTitle"><div class="grab"></div><div class="sheeth"><h2 id="soTitle">Ordenar o Sem fileira</h2><button class="x" id="close" aria-label="Fechar">×</button></div>`;
+  h += `<p class="hint">Isso arruma a lista uma vez. Depois você ainda pode arrastar os livros. As fileiras não mudam, porque elas seguem a estante de verdade.</p>`;
+  h += `<div class="sortlist">${Object.entries(SORTS).map(([k, [name, desc]]) => `<button class="sortopt" data-sort="${k}"><b>${name}</b><span>${desc}</span></button>`).join('')}</div></div></div>`;
+  $('#layer').innerHTML = h;
+  const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); }); $('#close').onclick = closeLayer;
+  ov.querySelectorAll('[data-sort]').forEach(x => x.onclick = () => sortUnplaced(x.dataset.sort));
+}
+async function sortUnplaced(mode) {
+  const shelf = S.current; const loose = rowLists(shelf)[0];
+  const before = loose.map(b => b.id), after = [...loose].sort(sortCompare(mode)).map(b => b.id);
+  closeLayer();
+  try {
+    await reorderUnplaced(shelf, after);
+    toast(`Sem fileira em ordem de ${SORTS[mode][2]}.`, 'Desfazer', async () => { try { await reorderUnplaced(shelf, before); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); } });
+  } catch (e) { toast(errorMessage(e)); }
 }
 
 /* ---------- drag and drop (mouse and touch, no library) ---------- */
@@ -331,7 +369,6 @@ function moveDrag(x, y) {
   const zone = hit.closest('.zone'); if (zone) { zone.classList.add('hot'); DRAG.zone = zone.dataset.zone; return; }
   const list = hit.closest('.drop'); if (!list) return;
   list.classList.add('target');
-  if (list.dataset.row === '0') { if (DRAG.el.parentElement !== list) list.prepend(DRAG.el); return; }
   const items = [...list.querySelectorAll('.book')].filter(el => el !== DRAG.el);
   const before = items.find(el => { const rr = el.getBoundingClientRect(); return y < rr.top + rr.height / 2; });
   const empty = list.querySelector('.emptycol'); if (empty) empty.hidden = true;
@@ -360,13 +397,14 @@ async function endDrag(cancelled) {
   }
   el && el.classList.remove('ph');
   const b = S.byId[id];
-  const changed = target && b && !(target.shelf === from.shelf && target.row === from.row && (target.row === 0 || target.index === locate(b).index));
+  const changed = target && b && !(target.shelf === from.shelf && target.row === from.row && target.index === locate(b).index);
   renderDeferred = false;
   if (!changed) { render(); return; }
   try {
     await moveBook(id, target.shelf, target.row, target.index);
     const where = target.shelf !== from.shelf ? `${shelfName(target.shelf)}, sem fileira` : target.row ? `fileira ${target.row}` : 'sem fileira';
-    toast(`${b.title} → ${where}`, 'Desfazer', async () => { try { await moveBook(id, from.shelf, from.row, from.row ? (b._startIndex ?? 0) : 0); } catch (e) { toast(errorMessage(e)); } });
+    const sameRow = target.shelf === from.shelf && target.row === from.row;
+    toast(sameRow ? `${b.title} mudou de posição` : `${b.title} → ${where}`, 'Desfazer', async () => { try { await moveBook(id, from.shelf, from.row, b._startIndex ?? 0); } catch (e) { toast(errorMessage(e)); } });
   } catch (e) { render(); toast(errorMessage(e)); }
 }
 document.addEventListener('pointerdown', e => {
@@ -506,6 +544,7 @@ document.addEventListener('click', async e => {
   const vw = e.target.closest('[data-view]'); if (vw) { S.view = vw.dataset.view; remember(); render(); return; }
   const jp = e.target.closest('[data-jump]'); if (jp) { const c = $('#col' + jp.dataset.jump), bd = $('#board'); if (c && bd) bd.scrollTo({ left: c.offsetLeft - bd.offsetLeft, behavior: 'smooth' }); return; }
   const ar = e.target.closest('[data-arrange]'); if (ar) { openArrange(+ar.dataset.arrange); return; }
+  if (e.target.closest('[data-sort-open]')) { openSortUnplaced(); return; }
   const bk = e.target.closest('.book'); if (bk) { openEditor(bk.dataset.id); return; }
   if (e.target.closest('#rowAdd')) { changeRows(1); return; }
   if (e.target.closest('#rowRemove')) { changeRows(-1); return; }

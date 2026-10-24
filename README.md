@@ -13,7 +13,8 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **Shelves as "stories"**: each shelf shows up at the top, with its book count.
 - **Rows side by side**: each row becomes a column, and books are listed top to bottom in the same order they stand left to right on the real shelf.
 - **Drag and drop**: hold a book and drag it to another position or another row. The bar that appears at the bottom sends it to another shelf. Works with a finger or a mouse.
-- **Arrange without typing**: after tidying a real row, tap its last book and every book before it, in A–Z order, goes to that row. You can also tap them one by one.
+- **Books not on a row yet** wait in their own list. Drag to change its order, or sort it by author, title or category.
+- **Arrange without typing**: after tidying a real row, tap its last book and every book before it in that list goes to that row, in the same order. You can also tap them one by one.
 - **Suggested A–Z order**: by the author's name as printed on the cover (Dan Brown files under D). Books by the same author stay together and series follow their volume order.
 - **New books**: the app suggests the shelf (where the author's other books are) and the right A–Z position. If the book is already in stock, it says so and offers to add one more copy.
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".

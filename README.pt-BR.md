@@ -13,7 +13,8 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 - **Estantes como "stories"**: cada estante aparece no topo com o número de livros dela.
 - **Fileiras lado a lado**: cada fileira vira uma coluna, e os livros aparecem de cima pra baixo na mesma ordem em que estão da esquerda pra direita na estante.
 - **Arrastar e soltar**: segure um livro e arraste pra outra posição ou outra fileira. Pela barra que aparece embaixo, dá pra mandar pra outra estante. Funciona com o dedo e com o mouse.
-- **Arrumar sem digitar**: depois de arrumar uma fileira de verdade, toque no último livro dela e todos os anteriores, na ordem A–Z, vão pra essa fileira. Também dá pra tocar um por um.
+- **Livros sem fileira** ficam numa lista à parte. Dá pra arrastar pra mudar a ordem, ou ordenar por autor, título ou categoria.
+- **Arrumar sem digitar**: depois de arrumar uma fileira de verdade, toque no último livro dela e todos os anteriores dessa lista vão pra essa fileira, na mesma ordem. Também dá pra tocar um por um.
 - **Ordem A–Z sugerida**: pelo nome do autor como aparece na capa (Dan Brown fica no D). Livros do mesmo autor ficam juntos e as séries seguem a ordem dos volumes.
 - **Livro novo**: o app sugere a estante (onde estão os outros livros do mesmo autor) e a posição certa na ordem A–Z. Se o livro já existir, ele avisa e oferece somar mais um exemplar.
 - **Busca** por título, autor, série ou observação, mostrando onde o livro está, como "Amarela · fileira 2 · 7º".
