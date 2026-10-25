@@ -8,7 +8,7 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 
 > The app's screens are in Brazilian Portuguese, where it is called *Palácio dos Livros*. The code and its comments are in English.
 
-<p align="center"><img src="docs/demo.gif" width="300" alt="The app on a phone, in demo mode: switching shelves, putting a book on a row, the A–Z view, searching and adding a new book"></p>
+<p align="center"><img src="docs/demo.gif" width="300" alt="The app on a phone, in demo mode: switching shelves, putting a book on a row, the A–Z view, searching, adding a new book and switching to dark mode"></p>
 
 ## Features
 
