@@ -6,15 +6,17 @@
 import { CATEGORIES, DEFAULT_ROWS } from './config.js';
 import { openStore } from './store.js';
 import { normalize, titleKey, authorKey, buildSortKey, compareKeys, initialOf } from './sort.js';
+import { cleanIsbn, isIsbn, lookupIsbn, searchBooks, findCover } from './catalog.js';
 
 const S = { store: null, user: undefined, shelves: {}, loaded: false, current: null, view: 'rows', query: '', books: [], byId: {}, noAccess: false, failed: false, sortKey: null };
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const category = c => CATEGORIES[c] || CATEGORIES.DIV || ['Sem categoria', '#9e9e9e'];
 const countCopies = list => list.reduce((s, b) => s + (b.copies || 1), 0);
+const booksWord = n => `${n} ${n === 1 ? 'livro' : 'livros'}`;
 const newId = prefix => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-try { const v = localStorage.getItem('book-palace:current'); if (v) S.current = v; const m = localStorage.getItem('book-palace:view'); if (m === 'az' || m === 'rows') S.view = m; } catch (e) {}
+try { const v = localStorage.getItem('book-palace:current'); if (v) S.current = v; const m = localStorage.getItem('book-palace:view'); if (m === 'az' || m === 'rows' || m === 'shelf') S.view = m; } catch (e) {}
 const remember = () => { try { localStorage.setItem('book-palace:current', S.current || ''); localStorage.setItem('book-palace:view', S.view); } catch (e) {} };
 
 /* ---------- shelves and books ---------- */
@@ -75,7 +77,7 @@ function guessShelf(draft) {
 const emptyShelf = () => ({ name: 'Estante', order: 999, rows: DEFAULT_ROWS, books: [] });
 async function updateShelf(id, fn) { await S.store.update([id], ([d]) => { const cur = d || emptyShelf(); if (!Array.isArray(cur.books)) cur.books = []; return [fn(cur) || cur]; }); }
 async function updateTwoShelves(a, b, fn) { await S.store.update([a, b], ([da, db]) => fn(da || emptyShelf(), db || emptyShelf())); }
-function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } if (b.isbn) o.isbn = String(b.isbn); return o; }
+function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } if (b.isbn) o.isbn = String(b.isbn); if (b.cover) o.cover = b.cover; if (b.pages) o.pages = b.pages; if (b.coverTried && !b.cover) o.coverTried = true; return o; }
 // Inserts a book into a shelf's array at position `index` of row `row` (row 0 = unplaced).
 function insertBook(list, book, row, index) {
   book = cleanBook({ ...book, row });
@@ -106,7 +108,8 @@ const canDrag = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 function bookButton(b, num, extra) {
   const color = category(b.category)[1];
   let badges = ''; if ((b.copies || 1) > 1) badges += `<span class="bq">${b.copies} exemplares</span>`; if (b.note) badges += `<span class="bn">${esc(b.note)}</span>`; if (extra) badges += extra;
-  return `<button class="book" data-id="${esc(b.id)}"><span class="pos">${num ?? ''}</span><span class="spine" style="background:${color}"></span><span><div class="bt">${esc(b.title)}</div><div class="ba">${esc(b.author || 'sem autor')}</div>${badges ? `<div class="badges">${badges}</div>` : ''}</span></button>`;
+  const pic = b.cover ? `<img class="thumb" src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'spine',style:'background:${color}'}))">` : `<span class="spine" style="background:${color}"></span>`;
+  return `<button class="book" data-id="${esc(b.id)}"><span class="pos">${num ?? ''}</span><span class="pic">${pic}</span><span><div class="bt">${esc(b.title)}</div><div class="ba">${esc(b.author || 'sem autor')}</div>${badges ? `<div class="badges">${badges}</div>` : ''}</span></button>`;
 }
 let storiesScrolled = false;
 function renderStories() {
@@ -119,8 +122,9 @@ function renderShelf() {
   const id = S.current;
   if (!id || !S.shelves[id]) return `<div class="state"><h2>Nenhuma estante ainda</h2><p>Crie a primeira estante ou importe um backup do estoque.</p>${canEdit() ? `<button class="btn blue" id="createFirst">Criar estante</button> <button class="btn" data-action="import">Importar backup</button>` : ''}</div>`;
   const lists = rowLists(id); const n = lists.length - 1; const all = S.books.filter(b => b.shelf === id); const w = canEdit();
-  let h = `<div class="shelfbar"><div><div class="eyebrow">Estante</div><h2>${esc(shelfName(id))}</h2><div class="meta">${countCopies(all)} livros · ${all.length} títulos · ${n} ${n > 1 ? 'fileiras' : 'fileira'}</div></div><div class="acts"><div class="seg" role="group" aria-label="Modo de ver"><button data-view="rows" class="${S.view === 'rows' ? 'on' : ''}">Fileiras</button><button data-view="az" class="${S.view === 'az' ? 'on' : ''}">Ordem A–Z</button></div>${w ? `<button class="btn" id="rowAdd">+ Fileira</button><button class="btn" id="rowRemove" ${lists[n].length || n <= 1 ? 'disabled' : ''} title="Só dá pra tirar a última fileira quando ela está vazia">− Fileira</button><button class="btn" id="editShelf">Editar estante</button>` : ''}</div></div>`;
+  let h = `<div class="shelfbar"><div><div class="eyebrow">Estante</div><h2>${esc(shelfName(id))}</h2><div class="meta">${countCopies(all)} livros · ${all.length} títulos · ${n} ${n > 1 ? 'fileiras' : 'fileira'}<span id="coverStatus"></span></div></div><div class="acts"><div class="seg" role="group" aria-label="Modo de ver"><button data-view="rows" class="${S.view === 'rows' ? 'on' : ''}">Fileiras</button><button data-view="az" class="${S.view === 'az' ? 'on' : ''}">Ordem A–Z</button><button data-view="shelf" class="${S.view === 'shelf' ? 'on' : ''}">Estante</button></div>${w ? `<button class="btn" id="rowAdd">+ Fileira</button><button class="btn" id="rowRemove" ${lists[n].length || n <= 1 ? 'disabled' : ''} title="Só dá pra tirar a última fileira quando ela está vazia">− Fileira</button><button class="btn" id="editShelf">Editar estante</button>` : ''}</div></div>`;
   if (!all.length) return h + `<div class="state"><h2>Estante vazia</h2><p>${w ? 'Toque em “+ Livro” pra colocar o primeiro livro aqui, ou mude livros de outra estante pra cá.' : 'Ainda não tem livros aqui.'}</p></div>`;
+  if (S.view === 'shelf') return h + renderBookcase(lists);
   if (S.view === 'az') {
     const sorted = [...all].sort(byKey); let cur = '', i = 0;
     h += `<p class="hint">Todos os livros desta estante na ordem A–Z, pelo nome do autor como está na capa. Use pra arrumar ou conferir: comece na fileira de cima, da esquerda pra direita.</p><div class="list">`;
@@ -133,11 +137,30 @@ function renderShelf() {
   h += `<div class="jumpbar"><button class="jarrow" data-step="-1" aria-label="Fileira anterior">‹</button><div class="jump" role="group" aria-label="Ir pra fileira">${cols.map(r => `<button class="pill" data-jump="${r}">${r ? 'Fileira ' + r : 'Sem fileira'} · <b>${countCopies(lists[r])}</b></button>`).join('')}</div><button class="jarrow" data-step="1" aria-label="Próxima fileira">›</button></div><div class="board" id="board" data-shelf="${esc(id)}">`;
   cols.forEach(r => {
     const l = lists[r];
-    h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${countCopies(l)} livros</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
+    h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${booksWord(countCopies(l))}</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
     if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira. ${drag ? 'Arraste pra mudar a ordem ou pra levar até uma fileira.' : 'Toque num livro pra escolher a fileira e a posição, ou use “Arrumar”.'} “Ordenar” põe a lista por autor, título ou categoria.</div>`;
     h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? i + 1 : '')).join('') : `<div class="emptycol">${w ? (drag ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia. Use “Arrumar” ou toque num livro pra trazer ele pra cá.') : 'Fileira vazia.'}</div>`}</div></section>`;
   });
   return h + '</div>';
+}
+// The shelf drawn as it looks: each row is a plank with the books standing on it, left to right.
+// A spine shows the left edge of the cover (or the category color), the title and author, and
+// is thicker when the book has more pages. Its height varies a little, only to look natural.
+const hashOf = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+function spineHtml(b) {
+  const color = category(b.category)[1], h = hashOf(b.id);
+  const width = b.pages ? Math.round(Math.max(18, Math.min(64, 12 + b.pages * 0.07))) : 26 + (h % 9);
+  const height = 84 + (h % 17);
+  const img = b.cover ? `url("${String(b.cover).replace(/["\\()]/g, '')}")` : 'none';
+  const style = esc(`--w:${width}px;--h:${height}%;--c:${color};--img:${img}`);
+  return `<button class="spinebk ${b.cover ? 'pic' : ''} ${(b.copies || 1) > 1 ? 'many' : ''}" data-id="${esc(b.id)}" title="${esc(b.title)} · ${esc(b.author || 'sem autor')}" style="${style}"><span class="sp-t">${esc(b.title)}</span><span class="sp-a">${esc(b.author || '')}</span>${(b.copies || 1) > 1 ? `<i class="sp-q">×${b.copies}</i>` : ''}</button>`;
+}
+function renderBookcase(lists) {
+  let h = `<p class="hint">Cada fileira como na prateleira, da esquerda pra direita. Toque numa lombada pra editar o livro.</p>`;
+  const plank = (label, list, loose) => `<section class="plank ${loose ? 'loose' : ''}"><h3>${label} <span class="n">${booksWord(countCopies(list))}</span></h3>${list.length ? `<div class="spines">${list.map(spineHtml).join('')}</div>` : `<div class="emptycol">Fileira vazia.</div>`}</section>`;
+  for (let r = 1; r < lists.length; r++) h += plank('Fileira ' + r, lists[r], false);
+  if (lists[0].length) h += plank('Sem fileira', lists[0], true);
+  return h;
 }
 function renderSearch() {
   const q = normalize(S.query); const found = S.books.filter(b => normalize(b.title + ' ' + b.author + ' ' + (b.note || '') + ' ' + (b.series || '') + ' ' + (b.isbn || '')).includes(q)).sort(byKey);
@@ -164,10 +187,45 @@ function render() {
   main.innerHTML = S.query ? renderSearch() : renderShelf();
   const board = $('#board');
   if (board) { setHeaderHeight(); board.scrollLeft = keepLeft; board.addEventListener('scroll', markCurrentColSoon, { passive: true }); markCurrentCol(); }
+  if (!S.query) startCoverSearch();
   $('#legend').innerHTML = Object.values(CATEGORIES).map(([n, c]) => `<span><i style="background:${c}"></i>${esc(n)}</span>`).join('');
   $('#foot').innerHTML = `<span>${S.store.mode === 'demo' ? 'Modo demonstração: os dados ficam só neste navegador.' : 'Salvo online: o que você muda aparece em todos os aparelhos.'}</span><button class="btn link" data-action="csv">Baixar planilha (CSV)</button><button class="btn link" data-action="json">Baixar backup</button>${canEdit() ? '<button class="btn link" data-action="import">Importar backup</button>' : ''}`;
 }
 const loginScreen = () => `<div class="login"><div class="brand">Palácio dos Livros</div><p>Entre com a sua conta Google pra ver e editar o estoque.</p><button class="btn blue" data-action="signin" style="padding:14px 20px;font-size:16px">Entrar com Google</button></div>`;
+
+/* ---------- covers, found little by little ---------- */
+// While a shelf is on screen, books without a cover are looked up one at a time (title and
+// author) and the results are saved in small batches. Books with no match are marked, so they
+// are not looked up again; "Procurar capa" in the editor can still try by hand.
+const COVERS = { running: false, tried: new Set(), found: new Map(), timer: null, offline: false };
+function coverCandidates() { return S.books.filter(b => b.shelf === S.current && !b.cover && !b.coverTried && !COVERS.tried.has(b.id)); }
+function showCoverStatus(text) { const el = $('#coverStatus'); if (el) el.textContent = text ? ` · ${text}` : ''; }
+function startCoverSearch() {
+  if (COVERS.running || COVERS.offline || !canEdit() || !S.current) return;
+  if (!coverCandidates().length) return;
+  COVERS.running = true; coverStep();
+}
+async function coverStep() {
+  const next = canEdit() ? coverCandidates()[0] : null;
+  if (!next) { COVERS.running = false; showCoverStatus(''); flushCovers(); return; }
+  const left = coverCandidates().length;
+  showCoverStatus(`buscando capas (faltam ${left})`);
+  COVERS.tried.add(next.id);
+  try { COVERS.found.set(next.id, (await findCover(next)) || { none: true }); }
+  catch (e) { COVERS.offline = true; COVERS.running = false; showCoverStatus(''); flushCovers(); return; } // no internet: try again next time the app opens
+  if (COVERS.found.size >= 8) flushCovers(); else { clearTimeout(COVERS.timer); COVERS.timer = setTimeout(flushCovers, 4000); }
+  setTimeout(coverStep, 700);
+}
+async function flushCovers() {
+  clearTimeout(COVERS.timer); if (!COVERS.found.size || !canEdit()) return;
+  const found = COVERS.found; COVERS.found = new Map();
+  const byShelf = {}; found.forEach((r, id) => { const b = S.byId[id]; if (b) (byShelf[b.shelf] = byShelf[b.shelf] || new Map()).set(id, r); });
+  for (const [shelf, results] of Object.entries(byShelf)) {
+    try {
+      await updateShelf(shelf, d => { d.books.forEach(x => { const r = results.get(x.id); if (!r || x.cover) return; if (r.cover) { x.cover = r.cover; if (r.pages && !x.pages) x.pages = r.pages; delete x.coverTried; } else x.coverTried = true; }); return d; });
+    } catch (e) { results.forEach((r, id) => COVERS.tried.delete(id)); } // try these again later
+  }
+}
 
 /* ---------- moving between rows ---------- */
 // The rows of a shelf are columns side by side. On a computer, the arrows and the mouse
@@ -205,23 +263,7 @@ document.addEventListener('wheel', e => {
 const setHeaderHeight = () => { const h = $('header.top'); if (h) document.documentElement.style.setProperty('--headH', h.offsetHeight + 'px'); };
 addEventListener('resize', setHeaderHeight); setHeaderHeight();
 
-/* ---------- ISBN: look up title and author, scan the barcode ---------- */
-const cleanIsbn = v => String(v || '').toUpperCase().replace(/[^0-9X]/g, '');
-const isIsbn = v => /^(\d{9}[\dX]|97[89]\d{10})$/.test(v);
-const joinAuthors = list => (list.length > 2 ? list.slice(0, -1).join(', ') + ' e ' + list[list.length - 1] : list.join(' e '));
-// Asks Google Books first and Open Library second. Returns {title, author, source} or null.
-async function lookupIsbn(isbn) {
-  const withSub = v => (v.subtitle ? `${v.title}: ${v.subtitle}` : v.title);
-  try {
-    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
-    if (r.ok) { const j = await r.json(); const v = j.items && j.items[0] && j.items[0].volumeInfo; if (v && v.title) return { title: withSub(v), author: joinAuthors(v.authors || []), source: 'Google Books' }; }
-  } catch (e) {}
-  try {
-    const r = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-    if (r.ok) { const j = await r.json(); const v = j['ISBN:' + isbn]; if (v && v.title) return { title: withSub(v), author: joinAuthors((v.authors || []).map(a => a.name)), source: 'Open Library' }; }
-  } catch (e) {}
-  return null;
-}
+/* ---------- ISBN: scan the barcode ---------- */
 // The browser's own barcode reader (Chrome on Android has it; Safari on iPhone does not).
 const canScan = () => 'BarcodeDetector' in window && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 let SCAN = null;
@@ -280,6 +322,7 @@ function drawEditor() {
   const authors = [...new Set(S.books.map(x => x.author).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt'));
   let h = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edTitle"><div class="grab"></div><div class="sheeth"><h2 id="edTitle">${isNew ? 'Novo livro' : ro ? 'Livro' : 'Editar livro'}</h2><button class="x" id="close" aria-label="Fechar">×</button></div>`;
   if (ED.added) h += `<div class="added">✓ ${ED.added} Pode cadastrar o próximo, ou fechar no ×.</div>`;
+  h += `<div class="coverrow" id="edCover"></div><div id="edCovers"></div>`;
   const isbnInput = `<div class="isbnrow"><input id="edI" inputmode="numeric" autocomplete="off" enterkeyhint="search" value="${esc(b.isbn || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: 978…">${ro ? '' : '<button class="btn" id="isbnGo">Buscar</button>'}</div><div id="edIsbnMsg" class="isbnmsg"></div>`;
   if (isNew) h += `<div class="field"><span>ISBN, o número embaixo do código de barras (opcional)</span>${canScan() ? '<button class="btn scanbtn" id="scan">Escanear código de barras</button>' : ''}${isbnInput}</div>`;
   h += `<label class="field"><span>Título</span><input id="edT" value="${esc(b.title)}" ${ro ? 'disabled' : ''} placeholder="Como está na capa"></label>`;
@@ -307,6 +350,7 @@ function drawEditor() {
     if (!ED || !$('#edI') || cleanIsbn($('#edI').value) !== v) return;
     if (!r) { isbnMsg('Não achei esse ISBN no Google Books nem no Open Library. Escreva o título e o autor à mão.'); return; }
     $('#edT').value = r.title; if (r.author) $('#edA').value = r.author;
+    if (r.cover) { ED.b.cover = r.cover; ED.b.coverTried = false; } if (r.pages) ED.b.pages = r.pages; drawCover();
     isbnMsg(`Achei no ${r.source}. Confira o título e o autor: às vezes eles vêm diferentes do que está na capa.`);
     onTyped();
   };
@@ -317,8 +361,29 @@ function drawEditor() {
     $('#isbnGo').onclick = () => findIsbn(true);
   }
   const scanBtn = $('#scan'); if (scanBtn) scanBtn.onclick = () => openScanner(code => { const el = $('#edI'); if (!el) return; el.value = code; onTyped(); findIsbn(true); });
+  drawCover();
   drawEditorDynamic();
   if (isNew && canDrag()) $('#edI').focus(); // on a computer; on phones, don't pop the keyboard up
+}
+// The cover at the top of the editor, with "Trocar capa" (pick one from a search) and "Tirar capa".
+function drawCover() {
+  const box = $('#edCover'); if (!box || !ED) return; const b = ED.b, ro = !canEdit();
+  const color = category(b.category)[1];
+  box.innerHTML = `${b.cover ? `<img class="coverimg" src="${esc(b.cover)}" alt="Capa" referrerpolicy="no-referrer">` : `<span class="nocover" style="background:${color}">sem capa</span>`}<div class="coveracts">${ro ? '' : `<button class="btn" id="coverFind">${b.cover ? 'Trocar capa' : 'Procurar capa'}</button>${b.cover ? '<button class="btn link" id="coverDrop">Tirar capa</button>' : ''}`}${b.pages ? `<span class="of">${b.pages} páginas</span>` : ''}</div>`;
+  const find = $('#coverFind'); if (find) find.onclick = findCovers;
+  const drop = $('#coverDrop'); if (drop) drop.onclick = () => { b.cover = ''; b.coverTried = true; $('#edCovers').innerHTML = ''; drawCover(); };
+}
+async function findCovers() {
+  readFields(); const b = ED.b, panel = $('#edCovers');
+  if (!b.title.trim()) { panel.innerHTML = `<p class="hint">Escreva o título primeiro.</p>`; return; }
+  panel.innerHTML = `<p class="hint">Procurando capas de “${esc(b.title)}”…</p>`;
+  let results = [];
+  try { results = await searchBooks(b.title, b.author); } catch (e) { if (ED && ED.b === b) panel.innerHTML = `<p class="hint">Não consegui procurar agora. Confira a internet.</p>`; return; }
+  if (!ED || ED.b !== b) return;
+  if (!results.length) { panel.innerHTML = `<p class="hint">Não achei capa desse livro no Google Books nem no Open Library.</p>`; return; }
+  panel.innerHTML = `<p class="hint">Toque na capa certa:</p><div class="covergrid">${results.map((r, i) => `<button class="coverpick" data-i="${i}"><img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span>${esc(r.title)}</span><small>${esc(r.author)}${r.pages ? ` · ${r.pages} p.` : ''}</small></button>`).join('')}</div><button class="btn link" id="coverNone">Nenhuma dessas</button>`;
+  panel.querySelectorAll('.coverpick').forEach(x => x.onclick = () => { const r = results[+x.dataset.i]; b.cover = r.cover; b.coverTried = false; if (r.pages) b.pages = r.pages; panel.innerHTML = ''; drawCover(); });
+  $('#coverNone').onclick = () => { panel.innerHTML = ''; };
 }
 function readFields() { const b = ED.b, g = id => $('#' + id); if (!g('edT')) return; b.title = g('edT').value; b.author = g('edA').value; b.category = g('edC').value; b.note = g('edN').value; b.series = g('edS').value; b.volume = parseInt(g('edV').value, 10) || 0; if (g('edI')) b.isbn = cleanIsbn(g('edI').value); }
 // The part of the editor that changes while typing (duplicate warning, place, suggestions),
@@ -379,8 +444,10 @@ async function saveEditor() {
   const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = b.index || 0;
   const btn = $('#save'); btn.disabled = true; btn.textContent = 'Salvando…';
   try {
-    if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
-    else await updateTwoShelves(shelf, original.shelf, (to, from) => { from.books = from.books.filter(x => x.id !== b.id); to.books = to.books.filter(x => x.id !== b.id); insertBook(to.books, b, row, index); return [to, from]; });
+    // A cover found in the background while the editor was open is kept, unless it was removed here.
+    const keepCover = list => { const cur = list.find(x => x.id === b.id); if (cur && cur.cover && !b.cover && !b.coverTried) { b.cover = cur.cover; if (!b.pages) b.pages = cur.pages; } };
+    if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { keepCover(d.books); d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
+    else await updateTwoShelves(shelf, original.shelf, (to, from) => { keepCover(from.books); from.books = from.books.filter(x => x.id !== b.id); to.books = to.books.filter(x => x.id !== b.id); insertBook(to.books, b, row, index); return [to, from]; });
     const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${index + 1}º` : ' · sem fileira'}`;
     closeLayer();
     if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
@@ -633,7 +700,7 @@ function parseBackup(j) {
   const out = {};
   for (const [id, d] of Object.entries(shelves)) {
     if (!/^[A-Za-z0-9_\-]{1,100}$/.test(id) || !d || !Array.isArray(d.books)) return null;
-    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', isbn: b.isbn ? String(b.isbn) : '', volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
+    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', isbn: b.isbn ? String(b.isbn) : '', cover: /^https:\/\//.test(b.cover || '') ? String(b.cover) : '', pages: parseInt(b.pages, 10) || 0, coverTried: !!b.coverTried, volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
   }
   return out;
 }
@@ -682,7 +749,7 @@ document.addEventListener('click', async e => {
   const ja = e.target.closest('.jarrow'); if (ja) { scrollToCol(currentCol() + (+ja.dataset.step)); return; }
   const ar = e.target.closest('[data-arrange]'); if (ar) { openArrange(+ar.dataset.arrange); return; }
   if (e.target.closest('[data-sort-open]')) { openSortUnplaced(); return; }
-  const bk = e.target.closest('.book'); if (bk) { openEditor(bk.dataset.id); return; }
+  const bk = e.target.closest('.book, .spinebk'); if (bk) { openEditor(bk.dataset.id); return; }
   if (e.target.closest('#rowAdd')) { changeRows(1); return; }
   if (e.target.closest('#rowRemove')) { changeRows(-1); return; }
   if (e.target.closest('#editShelf')) { openShelfEditor(S.current); return; }

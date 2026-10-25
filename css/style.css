@@ -6,7 +6,7 @@
    side-by-side row columns (the bookcase seen with your head tilted to the left). */
 :root{
   --bg:#ffffff; --fg:#262626; --muted:#737373; --line:#dbdbdb; --soft:#efefef; --soft2:#fafafa;
-  --blue:#0095f6; --blue-press:#1877f2; --red:#ed4956; --scrim:rgba(0,0,0,.45); --ink-on:#ffffff; --hot:#7cc4ff; --on-accent:#ffffff;
+  --blue:#0095f6; --blue-press:#1877f2; --red:#ed4956; --scrim:rgba(0,0,0,.45); --ink-on:#ffffff; --hot:#7cc4ff; --on-accent:#ffffff; --wood:#a1887f;
   --grad:linear-gradient(45deg,#feda75 0%,#fa7e1e 25%,#d62976 50%,#962fbf 75%,#4f5bd5 100%);
   --brand:"Grand Hotel","Brush Script MT",cursive;
   --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -17,12 +17,12 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#000000; --fg:#f5f5f5; --muted:#a8a8a8; --line:#363636; --soft:#262626; --soft2:#121212;
-    --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; color-scheme:dark;
+    --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; --wood:#5d4037; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#000000; --fg:#f5f5f5; --muted:#a8a8a8; --line:#363636; --soft:#262626; --soft2:#121212;
-  --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; color-scheme:dark;
+  --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; --wood:#5d4037; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -90,7 +90,7 @@ body.dragging .board{scroll-snap-type:none}
 .drop.target{background:rgba(0,149,246,.06)}
 .emptycol{color:var(--muted);font-size:14px;padding:16px 14px 18px}
 
-.book{display:grid;grid-template-columns:auto 4px minmax(0,1fr);gap:10px;align-items:center;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;padding:10px 12px 10px 10px;min-height:58px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.book{display:grid;grid-template-columns:auto 32px minmax(0,1fr);gap:10px;align-items:center;width:100%;text-align:left;border:0;border-top:1px solid var(--line);background:transparent;padding:10px 12px 10px 10px;min-height:58px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .drop>.book:first-child,.list>.book:first-child,.arrlist>.book:first-child{border-top:0}
 .book:active{background:var(--soft)}
 .book.ph{opacity:.35;outline:2px dashed var(--blue);outline-offset:-3px;background:var(--soft2)}
@@ -190,3 +190,28 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .scanframe{position:relative;width:min(80vw,360px);height:min(32vw,150px);border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
 .scanner p{position:absolute;top:calc(env(safe-area-inset-top,0px) + 24px);left:16px;right:16px;margin:0;text-align:center;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
 .scanner .btn{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);left:50%;transform:translateX(-50%);background:#fff;color:#000;border:0;padding:12px 22px}
+/* Covers: a small cover in lists (or a block in the category color), a bigger one in the editor. */
+.pic{display:block;width:32px;height:46px}
+.pic .thumb{display:block;width:32px;height:46px;object-fit:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.1)}
+.pic .spine{display:block;width:32px;height:46px;min-height:0;border-radius:3px;opacity:.9}
+.coverrow{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.coverimg,.nocover{flex:0 0 auto;width:64px;height:96px;border-radius:4px;object-fit:cover;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.nocover{display:grid;place-items:center;color:#fff;font-size:12px;font-weight:600;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.coveracts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.covergrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;margin:0 0 8px}
+.coverpick{display:grid;gap:4px;align-content:start;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:6px;font:inherit}
+.coverpick img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:4px;background:var(--soft)}
+.coverpick span{font-size:12px;font-weight:600;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.coverpick small{font-size:11px;color:var(--muted);line-height:1.2}
+/* "Estante" view: each row is a plank with the spines standing on it. */
+.plank{margin:0 0 18px}
+.plank h3{margin:0 0 6px;font-size:16px}
+.plank .n{color:var(--muted);font-size:13px;font-weight:400;margin-left:4px}
+.spines{display:flex;align-items:flex-end;gap:2px;height:210px;overflow-x:auto;padding:0 6px;background:var(--soft2);border-bottom:10px solid var(--wood);border-radius:4px 4px 2px 2px;scrollbar-width:thin}
+.plank.loose .spines{border-bottom-color:var(--line)}
+.spinebk{position:relative;flex:0 0 var(--w);height:var(--h);border:0;border-radius:3px 3px 1px 1px;padding:8px 0;color:#fff;background-color:var(--c);background-image:linear-gradient(90deg,rgba(255,255,255,.18),rgba(0,0,0,.15) 60%,rgba(0,0,0,.3));writing-mode:vertical-rl;display:flex;align-items:center;gap:6px;overflow:hidden;text-shadow:0 1px 2px rgba(0,0,0,.6);box-shadow:inset -1px 0 0 rgba(0,0,0,.25)}
+.spinebk.pic{background-image:linear-gradient(90deg,rgba(0,0,0,.3),rgba(0,0,0,.5)),var(--img);background-size:auto 100%;background-position:left center}
+.spinebk.many{padding-bottom:24px}
+.sp-t{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-inline-size:80%}
+.sp-a{font-size:10px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-inline-size:0}
+.sp-q{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);writing-mode:horizontal-tb;font-style:normal;font-size:10px;font-weight:700;background:rgba(0,0,0,.65);border-radius:6px;padding:1px 3px}

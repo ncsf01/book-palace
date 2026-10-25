@@ -21,6 +21,8 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **New books**: the app suggests the shelf (where the author's other books are) and the right A–Z position. If the book is already in stock, it says so and offers to add one more copy.
 - **ISBN and barcode**: type the ISBN, or scan the barcode with the phone camera (Chrome on Android), and the title and author are filled in from Google Books or, if not found there, Open Library. The lookup goes straight from the browser to those services.
 - **Several books in a row**: after a new book is saved, the form opens again on the same shelf, ready for the next one.
+- **Covers**: while a shelf is on screen, the app looks up the covers and page counts of its books, a few at a time, by title and author (Google Books first, then Open Library). A wrong or missing cover can be fixed in the book's editor with "Procurar capa" or "Tirar capa".
+- **Bookcase view**: "Estante" shows each row as a plank with the books standing on it, left to right. Each spine is drawn from the left edge of the cover (or the category color), with the title and author, and is thicker when the book has more pages. Public catalogs don't have spine photos, so the spines are drawn.
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".
 - **Backup**: download the stock as a spreadsheet (CSV) or as a backup file (JSON), and import that backup back.
 - **Live updates**: a change made on one phone shows up right away on the others.
@@ -113,6 +115,9 @@ A `shelves` collection in Firestore, with one document per shelf:
 | `row` | row number, counting from the top (`0` = not on a row yet) |
 | `note` | optional note, such as "sealed" or "pocket edition" |
 | `series`, `volume` | optional series name and volume number |
+| `isbn` | optional ISBN |
+| `cover`, `pages` | optional cover image address and page count, from the catalogs |
+| `coverTried` | `true` when no cover was found, so the app doesn't look it up again by itself |
 
 A book's position within its row is its order in the list. Every change is saved in a transaction, so two people editing at the same time don't overwrite each other's work.
 
@@ -133,6 +138,7 @@ js/config.js          Firebase settings and categories
 js/app.js             screens, editing, drag and drop
 js/store.js           Firebase and demo mode
 js/sort.js            A–Z order by author
+js/catalog.js         ISBN, covers and page counts from Google Books and Open Library
 data/sample.json      demo mode books
 firestore.rules       who can read and edit
 docs/demo.gif         the animation at the top of this page
