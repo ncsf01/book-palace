@@ -21,7 +21,7 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **New books**: the app suggests the shelf (where the author's other books are) and the right A–Z position. If the book is already in stock, it says so and offers to add one more copy.
 - **ISBN and barcode**: type the ISBN, or scan the barcode with the phone camera (Chrome on Android), and the title and author are filled in from Google Books or, if not found there, Open Library. The lookup goes straight from the browser to those services.
 - **Several books in a row**: after a new book is saved, the form opens again on the same shelf, ready for the next one.
-- **Covers**: while a shelf is on screen, the app looks up the covers and page counts of its books, a few at a time, by title and author (Google Books first, then Open Library). A wrong or missing cover can be fixed in the book's editor: "Procurar capa" shows the covers found, typing the ISBN brings that edition's cover, a cover found on Google Images can be pasted by its image address, and "Tirar capa" removes it.
+- **Covers**: while a shelf is on screen, the app looks up the covers and page counts of its books, a few at a time, by title and author (Google Books first, then Open Library). A wrong or missing cover can be fixed in the book's editor: "Procurar capa" shows the covers found, typing the ISBN brings that edition's cover, a cover found on Google Images can be pasted by its image address, "Fotografar capa" takes a photo with the phone camera, and "Remover capa" removes it.
 - **Bookcase view**: "Estante" shows each row as a plank with the books standing on it, left to right. Each spine is drawn from the left edge of the cover (or the category color), with the title and author, and is thicker when the book has more pages. Public catalogs don't have spine photos, so the spines are drawn.
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".
 - **Backup**: download the stock as a spreadsheet (CSV) or as a backup file (JSON), and import that backup back.
@@ -118,6 +118,11 @@ A `shelves` collection in Firestore, with one document per shelf:
 | `isbn` | optional ISBN |
 | `cover`, `pages` | optional cover image address and page count, from the catalogs |
 | `coverTried` | `true` when no cover was found, so the app doesn't look it up again by itself |
+| `photo` | `true` when the cover is a photo taken with the phone |
+
+Cover photos are kept in a second collection, `photos`, with one document per book (the book's `id`) holding a small JPEG: `{ "data": "data:image/jpeg;base64,…", "at": 1761400000000 }`. They don't fit in the shelf documents, which Firestore limits to 1 MiB each. The backup file ("Baixar backup") doesn't include the photos.
+
+> **Upgrading from an older version?** Photos need the `photos` block of [`firestore.rules`](firestore.rules). Add it to the rules in the Firebase console and publish.
 
 A book's position within its row is its order in the list. Every change is saved in a transaction, so two people editing at the same time don't overwrite each other's work.
 

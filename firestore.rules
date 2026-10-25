@@ -21,5 +21,10 @@ service cloud.firestore {
     match /shelves/{shelf} {
       allow read, write: if isAllowed();
     }
+
+    // Cover photos taken with the phone, one document per book.
+    match /photos/{photo} {
+      allow read, write: if isAllowed();
+    }
   }
 }

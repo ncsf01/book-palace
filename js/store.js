@@ -8,11 +8,15 @@
 // Data model: a "shelves" collection with one document per shelf:
 //   { name, order, rows, books: [ {id, title, author, category, copies, row, note?, series?, volume?}, ... ] }
 // row 0 means "not on a row yet". A book's position within its row is its order in the array.
+//
+// Cover photos taken with the phone live in a separate "photos" collection, one small JPEG
+// (as a data: address) per book: { data, at }. They don't fit in the shelf documents.
 
 import { FIREBASE_CONFIG } from './config.js';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLECTION = 'shelves';
+const PHOTOS = 'photos';
 const clone = o => (o == null ? o : JSON.parse(JSON.stringify(o)));
 
 export async function openStore() {
@@ -29,7 +33,7 @@ async function openFirebase(cfg) {
   ]);
   const { initializeApp } = appMod;
   const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } = authMod;
-  const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, runTransaction, writeBatch } = fsMod;
+  const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, runTransaction, writeBatch, setDoc, deleteDoc } = fsMod;
 
   const app = initializeApp(cfg);
   const auth = getAuth(app);
@@ -84,6 +88,12 @@ async function openFirebase(cfg) {
         await batch.commit();
       }
     },
+    // Cover photos. onData gets {bookId: dataAddress}, or null when the rules don't allow photos yet.
+    subscribePhotos(onData) {
+      return onSnapshot(collection(db, PHOTOS), snap => { const out = {}; snap.forEach(d => { out[d.id] = d.data().data; }); onData(out); }, () => onData(null));
+    },
+    setPhoto: (id, data) => setDoc(doc(db, PHOTOS, id), { data, at: Date.now() }),
+    deletePhoto: id => deleteDoc(doc(db, PHOTOS, id)),
   };
 }
 
@@ -97,6 +107,9 @@ async function openDemo() {
     catch (e) { shelves = {}; }
   }
   const listeners = new Set();
+  const PHOTO_KEY = 'book-palace:demo-photos', photoListeners = new Set();
+  let photos = {}; try { photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || '{}') || {}; } catch (e) { photos = {}; }
+  const savePhotos = () => { try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photos)); } catch (e) {} setTimeout(() => photoListeners.forEach(cb => cb({ ...photos })), 0); };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(shelves)); } catch (e) {} };
   const notify = () => listeners.forEach(cb => cb(clone(shelves), { pending: false, fromCache: false }));
   save();
@@ -112,6 +125,9 @@ async function openDemo() {
       save(); setTimeout(notify, 0);
     },
     async importShelves(incoming) { Object.assign(shelves, clone(incoming)); save(); setTimeout(notify, 0); },
-    async resetDemo() { try { localStorage.removeItem(KEY); } catch (e) {} location.reload(); },
+    subscribePhotos(onData) { photoListeners.add(onData); setTimeout(() => onData({ ...photos }), 0); return () => photoListeners.delete(onData); },
+    async setPhoto(id, data) { photos[id] = data; savePhotos(); },
+    async deletePhoto(id) { delete photos[id]; savePhotos(); },
+    async resetDemo() { try { localStorage.removeItem(KEY); localStorage.removeItem(PHOTO_KEY); } catch (e) {} location.reload(); },
   };
 }

@@ -83,7 +83,7 @@ function guessShelf(draft) {
 const emptyShelf = () => ({ name: 'Estante', order: 999, rows: DEFAULT_ROWS, books: [] });
 async function updateShelf(id, fn) { await S.store.update([id], ([d]) => { const cur = d || emptyShelf(); if (!Array.isArray(cur.books)) cur.books = []; return [fn(cur) || cur]; }); }
 async function updateTwoShelves(a, b, fn) { await S.store.update([a, b], ([da, db]) => fn(da || emptyShelf(), db || emptyShelf())); }
-function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } if (b.isbn) o.isbn = String(b.isbn); if (b.cover) o.cover = b.cover; if (b.pages) o.pages = b.pages; if (b.coverTried && !b.cover) o.coverTried = true; return o; }
+function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } if (b.isbn) o.isbn = String(b.isbn); if (b.cover) o.cover = b.cover; if (b.photo) o.photo = true; if (b.pages) o.pages = b.pages; if (b.coverTried && !b.cover && !b.photo) o.coverTried = true; return o; }
 // Inserts a book into a shelf's array at position `index` of row `row` (row 0 = unplaced).
 function insertBook(list, book, row, index) {
   book = cleanBook({ ...book, row });
@@ -106,6 +106,10 @@ function errorMessage(e) {
   return 'Não consegui salvar agora. Tente de novo.';
 }
 const canEdit = () => !!S.user && !S.noAccess && S.loaded;
+// Cover photos taken with the phone: {bookId: data address}. allowed is false when the Firebase
+// rules don't include the "photos" collection yet.
+const PH = { map: {}, allowed: true };
+const coverSrc = b => (b.photo && PH.map[b.id]) || b.cover || '';
 // Drag and drop only with a mouse. On phones, tapping a book opens the editor,
 // where shelf, row and position are chosen with buttons.
 const canDrag = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
@@ -114,7 +118,8 @@ const canDrag = () => matchMedia('(hover: hover) and (pointer: fine)').matches;
 function bookButton(b, num, extra) {
   const color = category(b.category)[1];
   let badges = ''; if ((b.copies || 1) > 1) badges += `<span class="bq">${b.copies} exemplares</span>`; if (b.note) badges += `<span class="bn">${esc(b.note)}</span>`; if (extra) badges += extra;
-  const pic = b.cover ? `<img class="thumb" src="${esc(b.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'spine',style:'background:${color}'}))">` : `<span class="spine" style="background:${color}"></span>`;
+  const src = coverSrc(b);
+  const pic = src ? `<img class="thumb" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'spine',style:'background:${color}'}))">` : `<span class="spine" style="background:${color}"></span>`;
   return `<button class="book" data-id="${esc(b.id)}"><span class="pos">${num ?? ''}</span><span class="pic">${pic}</span><span><div class="bt">${esc(b.title)}</div><div class="ba">${esc(b.author || 'sem autor')}</div>${badges ? `<div class="badges">${badges}</div>` : ''}</span></button>`;
 }
 let storiesScrolled = false;
@@ -157,9 +162,10 @@ function spineHtml(b) {
   const color = category(b.category)[1], h = hashOf(b.id);
   const width = b.pages ? Math.round(Math.max(18, Math.min(64, 12 + b.pages * 0.07))) : 26 + (h % 9);
   const height = 84 + (h % 17);
-  const img = b.cover ? `url("${String(b.cover).replace(/["\\()]/g, '')}")` : 'none';
+  const src = coverSrc(b);
+  const img = src ? `url("${String(src).replace(/["\\()]/g, '')}")` : 'none';
   const style = esc(`--w:${width}px;--h:${height}%;--c:${color};--img:${img}`);
-  return `<button class="spinebk ${b.cover ? 'pic' : ''} ${(b.copies || 1) > 1 ? 'many' : ''}" data-id="${esc(b.id)}" title="${esc(b.title)} · ${esc(b.author || 'sem autor')}" style="${style}"><span class="sp-t">${esc(b.title)}</span><span class="sp-a">${esc(b.author || '')}</span>${(b.copies || 1) > 1 ? `<i class="sp-q">×${b.copies}</i>` : ''}</button>`;
+  return `<button class="spinebk ${src ? 'pic' : ''} ${(b.copies || 1) > 1 ? 'many' : ''}" data-id="${esc(b.id)}" title="${esc(b.title)} · ${esc(b.author || 'sem autor')}" style="${style}"><span class="sp-t">${esc(b.title)}</span><span class="sp-a">${esc(b.author || '')}</span>${(b.copies || 1) > 1 ? `<i class="sp-q">×${b.copies}</i>` : ''}</button>`;
 }
 function renderBookcase(lists) {
   let h = `<p class="hint">Cada fileira como na prateleira, da esquerda pra direita. Toque numa lombada pra editar o livro.</p>`;
@@ -204,7 +210,7 @@ const loginScreen = () => `<div class="login"><div class="brand">Palácio dos Li
 // author) and the results are saved in small batches. Books with no match are marked, so they
 // are not looked up again; "Procurar capa" in the editor can still try by hand.
 const COVERS = { running: false, tried: new Set(), found: new Map(), timer: null, offline: false, added: 0 };
-function coverCandidates() { return S.books.filter(b => b.shelf === S.current && !b.cover && !b.coverTried && !COVERS.tried.has(b.id)); }
+function coverCandidates() { return S.books.filter(b => b.shelf === S.current && !b.cover && !b.photo && !b.coverTried && !COVERS.tried.has(b.id)); }
 let statusTimer = null;
 // The status stays in COVERS.status so that it survives the shelf being drawn again.
 function showCoverStatus(text, forMs) { clearTimeout(statusTimer); COVERS.status = text ? ` · ${text}` : ''; const el = $('#coverStatus'); if (el) el.textContent = COVERS.status; if (text && forMs) statusTimer = setTimeout(() => showCoverStatus(''), forMs); }
@@ -242,7 +248,7 @@ async function flushCovers() {
   const byShelf = {}; found.forEach((r, id) => { const b = S.byId[id]; if (b) (byShelf[b.shelf] = byShelf[b.shelf] || new Map()).set(id, r); });
   for (const [shelf, results] of Object.entries(byShelf)) {
     try {
-      await updateShelf(shelf, d => { d.books.forEach(x => { const r = results.get(x.id); if (!r || x.cover) return; if (r.cover) { x.cover = r.cover; if (r.pages && !x.pages) x.pages = r.pages; delete x.coverTried; } else x.coverTried = true; }); return d; });
+      await updateShelf(shelf, d => { d.books.forEach(x => { const r = results.get(x.id); if (!r || x.cover || x.photo) return; if (r.cover) { x.cover = r.cover; if (r.pages && !x.pages) x.pages = r.pages; delete x.coverTried; } else x.coverTried = true; }); return d; });
     } catch (e) { results.forEach((r, id) => COVERS.tried.delete(id)); } // try these again later
   }
 }
@@ -404,10 +410,59 @@ function drawEditor() {
 // The cover at the top of the editor, with "Trocar capa" (pick one from a search) and "Tirar capa".
 function drawCover() {
   const box = $('#edCover'); if (!box || !ED) return; const b = ED.b, ro = !canEdit();
-  const color = category(b.category)[1];
-  box.innerHTML = `${b.cover ? `<img class="coverimg" src="${esc(b.cover)}" alt="Capa" referrerpolicy="no-referrer">` : `<span class="nocover" style="background:${color}">sem capa</span>`}<div class="coveracts">${ro ? '' : `<button class="btn" id="coverFind">${b.cover ? 'Trocar capa' : 'Procurar capa'}</button>${b.cover ? '<button class="btn link" id="coverDrop">Tirar capa</button>' : ''}`}${b.pages ? `<span class="of">${b.pages} páginas</span>` : ''}</div>`;
+  const color = category(b.category)[1], src = b._photo || coverSrc(b);
+  box.innerHTML = `${src ? `<img class="coverimg" src="${esc(src)}" alt="Capa" referrerpolicy="no-referrer">` : `<span class="nocover" style="background:${color}">sem capa</span>`}<div class="coveracts">${ro ? '' : `<button class="btn" id="coverFind">${src ? 'Trocar capa' : 'Procurar capa'}</button><button class="btn" id="coverShot">Fotografar capa</button>${src ? '<button class="btn link" id="coverDrop">Remover capa</button>' : ''}`}${b.pages ? `<span class="of">${b.pages} páginas</span>` : ''}</div>`;
   const find = $('#coverFind'); if (find) find.onclick = findCovers;
-  const drop = $('#coverDrop'); if (drop) drop.onclick = () => { b.cover = ''; b.coverTried = true; $('#edCovers').innerHTML = ''; drawCover(); };
+  const shot = $('#coverShot'); if (shot) shot.onclick = takeCoverPhoto;
+  const drop = $('#coverDrop'); if (drop) drop.onclick = () => { if (b.photo || b._photo) ED.dropPhoto = true; b.cover = ''; b.photo = false; b._photo = null; b.coverTried = true; $('#edCovers').innerHTML = ''; drawCover(); };
+}
+// Opens the phone's camera app (it focuses better than a camera inside the page), then lets the
+// person fit the cover in a frame before keeping it.
+function takeCoverPhoto() {
+  if (!PH.allowed) { toast('Pra guardar fotos de capa, falta atualizar as regras do Firebase. Veja o README do projeto.'); return; }
+  const b = ED.b; const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*'; input.setAttribute('capture', 'environment'); input.hidden = true;
+  input.onchange = () => { const f = input.files && input.files[0]; input.remove(); if (f) openCropper(f, data => { if (!ED || ED.b !== b) return; b._photo = data; b.photo = true; b.coverTried = false; ED.dropPhoto = false; $('#edCovers').innerHTML = ''; drawCover(); }); };
+  document.body.appendChild(input); input.click();
+}
+// Fit the photo in a cover-shaped frame (2:3): drag to move, slider or two fingers to zoom.
+// The result is a 300×450 JPEG, small enough to keep in the database.
+function openCropper(file, onDone) {
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Não consegui abrir essa foto.'); };
+  img.onload = () => {
+    const box = document.createElement('div'); box.className = 'cropper';
+    box.innerHTML = `<p>Arraste e aproxime pra encaixar a capa na moldura.</p><div class="cropframe"><img alt="" src="${url}"></div><input type="range" min="1" max="4" step="0.01" value="1" aria-label="Aproximar"><div class="cropacts"><button class="btn" id="cropNo">Cancelar</button><button class="btn blue" id="cropYes">Usar foto</button></div>`;
+    document.body.appendChild(box);
+    const frame = box.querySelector('.cropframe'), pic = frame.querySelector('img'), range = box.querySelector('input');
+    const W = frame.clientWidth, H = frame.clientHeight, base = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    let zoom = 1, x = 0, y = 0;
+    const draw = () => {
+      const k = base * zoom, w = img.naturalWidth * k, h = img.naturalHeight * k;
+      x = Math.min(0, Math.max(W - w, x)); y = Math.min(0, Math.max(H - h, y)); // the photo always fills the frame
+      pic.style.width = w + 'px'; pic.style.height = h + 'px'; pic.style.transform = `translate(${x}px,${y}px)`;
+    };
+    x = (W - img.naturalWidth * base) / 2; y = (H - img.naturalHeight * base) / 2; draw();
+    const setZoom = z => { const cx = W / 2, cy = H / 2, old = zoom; zoom = Math.max(1, Math.min(4, z)); x = cx - (cx - x) * zoom / old; y = cy - (cy - y) * zoom / old; range.value = zoom; draw(); };
+    range.oninput = () => setZoom(+range.value);
+    const pts = new Map(); let pinch = 0;
+    frame.onpointerdown = e => { frame.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); };
+    frame.onpointermove = e => {
+      const p = pts.get(e.pointerId); if (!p) return;
+      if (pts.size === 1) { x += e.clientX - p.x; y += e.clientY - p.y; draw(); }
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 2) { const [a, c] = [...pts.values()]; const d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch) setZoom(zoom * d / pinch); pinch = d; }
+    };
+    frame.onpointerup = frame.onpointercancel = e => { pts.delete(e.pointerId); pinch = 0; };
+    const close = () => { box.remove(); URL.revokeObjectURL(url); };
+    box.querySelector('#cropNo').onclick = close;
+    box.querySelector('#cropYes').onclick = () => {
+      const k = base * zoom, canvas = document.createElement('canvas'); canvas.width = 300; canvas.height = 450;
+      canvas.getContext('2d').drawImage(img, -x / k, -y / k, W / k, H / k, 0, 0, 300, 450);
+      const data = canvas.toDataURL('image/jpeg', 0.72); close(); onDone(data);
+    };
+  };
+  img.src = url;
 }
 async function findCovers() {
   readFields(); const b = ED.b, panel = $('#edCovers');
@@ -423,7 +478,8 @@ async function findCovers() {
   const q = encodeURIComponent(`${b.title.replace(/\(.*?\)/g, '')} ${b.author} livro`);
   h += `<div class="pastebox"><p class="hint">Não achou a sua? Procure no Google Imagens, toque e segure na capa certa, escolha <b>Copiar endereço da imagem</b> e cole aqui:</p><div class="isbnrow"><a class="btn" href="https://www.google.com/search?tbm=isch&q=${q}" target="_blank" rel="noopener">Google Imagens</a><input id="coverUrl" inputmode="url" autocomplete="off" placeholder="https://…"><button class="btn" id="coverUse">Usar</button></div><div id="coverUrlMsg" class="isbnmsg"></div></div><button class="btn link" id="coverNone">Fechar</button>`;
   panel.innerHTML = h;
-  panel.querySelectorAll('.coverpick').forEach(x => x.onclick = () => { const r = results[+x.dataset.i]; b.cover = r.cover; b.coverTried = false; if (r.pages) b.pages = r.pages; panel.innerHTML = ''; drawCover(); });
+  const usePicture = () => { if (b.photo || b._photo) ED.dropPhoto = true; b.photo = false; b._photo = null; b.coverTried = false; };
+  panel.querySelectorAll('.coverpick').forEach(x => x.onclick = () => { const r = results[+x.dataset.i]; usePicture(); b.cover = r.cover; if (r.pages) b.pages = r.pages; panel.innerHTML = ''; drawCover(); });
   $('#coverNone').onclick = () => { panel.innerHTML = ''; };
   $('#coverUse').onclick = () => {
     const url = $('#coverUrl').value.trim(), msg = t => { $('#coverUrlMsg').textContent = t; };
@@ -431,7 +487,7 @@ async function findCovers() {
     if (!/^https:\/\/\S+$/.test(url)) { msg('Cole um endereço de imagem que comece com https://'); return; }
     msg('Abrindo a imagem…');
     const test = new Image(); test.referrerPolicy = 'no-referrer';
-    test.onload = () => { if (!ED || ED.b !== b) return; b.cover = url; b.coverTried = false; panel.innerHTML = ''; drawCover(); };
+    test.onload = () => { if (!ED || ED.b !== b) return; usePicture(); b.cover = url; panel.innerHTML = ''; drawCover(); };
     test.onerror = () => msg('Não consegui abrir essa imagem. Tente copiar o endereço de outra.');
     test.src = url;
   };
@@ -485,7 +541,7 @@ function drawEditorDynamic() {
   on('save', saveEditor);
   on('delete', () => { ED.confirmDelete = true; drawEditorDynamic(); });
   on('deleteNo', () => { ED.confirmDelete = false; drawEditorDynamic(); });
-  on('deleteYes', async () => { const shelf = ED.original.shelf, id = b.id, title = b.title; closeLayer(); try { await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== id); return d; }); toast(`${title} saiu do estoque.`); } catch (e) { toast(errorMessage(e)); } });
+  on('deleteYes', async () => { const shelf = ED.original.shelf, id = b.id, title = b.title; if (b.photo) S.store.deletePhoto(id).catch(() => {}); closeLayer(); try { await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== id); return d; }); toast(`${title} saiu do estoque.`); } catch (e) { toast(errorMessage(e)); } });
 }
 async function saveEditor() {
   readFields(); const b = ED.b;
@@ -495,11 +551,18 @@ async function saveEditor() {
   b.title = b.title.trim(); b.author = b.author.trim(); b.note = (b.note || '').trim(); b.series = (b.series || '').trim(); if (!b.series) b.volume = 0; b.isbn = cleanIsbn(b.isbn);
   const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = b.index || 0;
   const btn = $('#save'); btn.disabled = true; btn.textContent = 'Salvando…';
+  const dropPhoto = !!ED.dropPhoto && !b.photo;
+  if (b._photo) {
+    try { await S.store.setPhoto(b.id, b._photo); }
+    catch (e) { btn.disabled = false; btn.textContent = isNew ? 'Adicionar ao estoque' : 'Salvar'; toast(e && e.code === 'permission-denied' ? 'Pra guardar fotos de capa, falta atualizar as regras do Firebase. Veja o README do projeto.' : errorMessage(e)); return; }
+    PH.map[b.id] = b._photo; b.photo = true;
+  }
   try {
     // A cover found in the background while the editor was open is kept, unless it was removed here.
     const keepCover = list => { const cur = list.find(x => x.id === b.id); if (cur && cur.cover && !b.cover && !b.coverTried) { b.cover = cur.cover; if (!b.pages) b.pages = cur.pages; } };
     if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { keepCover(d.books); d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
     else await updateTwoShelves(shelf, original.shelf, (to, from) => { keepCover(from.books); from.books = from.books.filter(x => x.id !== b.id); to.books = to.books.filter(x => x.id !== b.id); insertBook(to.books, b, row, index); return [to, from]; });
+    if (dropPhoto) S.store.deletePhoto(b.id).catch(() => {});
     const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${placeText(slotOf(rowLists(shelf, b.id)[row] || [], index), b.copies)}` : ' · sem fileira'}`;
     closeLayer();
     if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
@@ -755,7 +818,7 @@ function parseBackup(j) {
   const out = {};
   for (const [id, d] of Object.entries(shelves)) {
     if (!/^[A-Za-z0-9_\-]{1,100}$/.test(id) || !d || !Array.isArray(d.books)) return null;
-    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', isbn: b.isbn ? String(b.isbn) : '', cover: /^https:\/\//.test(b.cover || '') ? String(b.cover) : '', pages: parseInt(b.pages, 10) || 0, coverTried: !!b.coverTried, volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
+    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', isbn: b.isbn ? String(b.isbn) : '', cover: /^https:\/\//.test(b.cover || '') ? String(b.cover) : '', pages: parseInt(b.pages, 10) || 0, coverTried: !!b.coverTried, photo: !!b.photo, volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
   }
   return out;
 }
@@ -819,15 +882,17 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (SCAN) 
 (async () => {
   try { S.store = await openStore(); }
   catch (e) { $('#main').innerHTML = `<div class="state"><h2>Não deu pra abrir o estoque</h2><p>Confira a internet e recarregue a página. Se você acabou de configurar o Firebase, confira o arquivo js/config.js.</p></div>`; return; }
-  let stop = null;
+  let stop = null, stopPhotos = null;
   S.store.onUserChange(u => {
     S.user = u; S.noAccess = false; S.failed = false;
     if (stop) { stop(); stop = null; }
+    if (stopPhotos) { stopPhotos(); stopPhotos = null; } PH.map = {};
     if (!u) { S.loaded = false; S.shelves = {}; rebuild(); render(); return; }
     render();
     stop = S.store.subscribe(shelves => {
       S.shelves = shelves; rebuild(); S.loaded = true; render();
       if (ED) whenReleased(drawEditorDynamic); if (AR) whenReleased(() => { if (AR) drawArrange(); });
     }, err => { if (err === 'no-access') S.noAccess = true; else S.failed = true; S.loaded = false; render(); });
+    stopPhotos = S.store.subscribePhotos(map => { PH.allowed = map !== null; PH.map = map || {}; if (S.loaded) render(); if (ED) drawCover(); });
   });
 })();

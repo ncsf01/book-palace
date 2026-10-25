@@ -21,7 +21,7 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 - **Livro novo**: o app sugere a estante (onde estão os outros livros do mesmo autor) e a posição certa na ordem A–Z. Se o livro já existir, ele avisa e oferece somar mais um exemplar.
 - **ISBN e código de barras**: digite o ISBN, ou leia o código de barras com a câmera do celular (no Chrome do Android), e o título e o autor vêm preenchidos pelo Google Books ou, se não achar lá, pelo Open Library. A busca vai direto do navegador pra esses serviços.
 - **Vários livros seguidos**: depois de salvar um livro novo, o formulário abre de novo na mesma estante, pronto pro próximo.
-- **Capas**: enquanto uma estante está na tela, o app procura as capas e o número de páginas dos livros dela, poucos de cada vez, pelo título e autor (primeiro no Google Books, depois no Open Library). Uma capa errada ou que faltou dá pra corrigir na edição do livro: o "Procurar capa" mostra as capas encontradas, digitar o ISBN traz a capa daquela edição, dá pra colar o endereço de uma capa achada no Google Imagens, e o "Tirar capa" remove.
+- **Capas**: enquanto uma estante está na tela, o app procura as capas e o número de páginas dos livros dela, poucos de cada vez, pelo título e autor (primeiro no Google Books, depois no Open Library). Uma capa errada ou que faltou dá pra corrigir na edição do livro: o "Procurar capa" mostra as capas encontradas, digitar o ISBN traz a capa daquela edição, dá pra colar o endereço de uma capa achada no Google Imagens, o "Fotografar capa" tira uma foto com a câmera do celular, e o "Remover capa" remove.
 - **Modo estante**: o "Estante" mostra cada fileira como uma prateleira, com os livros em pé, da esquerda pra direita. Cada lombada é desenhada com a beirada esquerda da capa (ou a cor da categoria), o título e o autor, e fica mais grossa quando o livro tem mais páginas. Os catálogos públicos não têm foto de lombada, por isso elas são desenhadas.
 - **Busca** por título, autor, série ou observação, mostrando onde o livro está, como "Amarela · fileira 2 · 7º".
 - **Backup**: baixa o estoque como planilha (CSV) ou como arquivo de backup (JSON), e importa esse backup de volta.
@@ -120,6 +120,11 @@ Uma coleção `shelves` no Firestore, com um documento por estante. Os nomes dos
 | `isbn` | ISBN, se tiver |
 | `cover`, `pages` | endereço da imagem da capa e número de páginas, vindos dos catálogos |
 | `coverTried` | `true` quando a capa não foi encontrada, pro app não procurar de novo sozinho |
+| `photo` | `true` quando a capa é uma foto tirada com o celular |
+
+As fotos de capa ficam numa segunda coleção, `photos`, com um documento por livro (o `id` do livro) guardando um JPEG pequeno: `{ "data": "data:image/jpeg;base64,…", "at": 1761400000000 }`. Elas não cabem nos documentos das estantes, que o Firestore limita a 1 MiB cada. O arquivo de backup ("Baixar backup") não inclui as fotos.
+
+> **Atualizando de uma versão antiga?** As fotos precisam do bloco `photos` do [`firestore.rules`](firestore.rules). Acrescente ele nas regras, no console do Firebase, e publique.
 
 A posição de cada livro dentro da fileira é a ordem dele na lista. Toda mudança é gravada numa transação, então duas pessoas mexendo ao mesmo tempo não apagam o trabalho uma da outra.
 
