@@ -363,9 +363,14 @@ function drawEditor() {
     const r = await lookupIsbn(v);
     if (!ED || !$('#edI') || cleanIsbn($('#edI').value) !== v) return;
     if (!r) { isbnMsg('Não achei esse ISBN no Google Books nem no Open Library. Escreva o título e o autor à mão.'); return; }
-    $('#edT').value = r.title; if (r.author) $('#edA').value = r.author;
     if (r.cover) { ED.b.cover = r.cover; ED.b.coverTried = false; } if (r.pages) ED.b.pages = r.pages; drawCover();
-    isbnMsg(`Achei no ${r.source}. Confira o título e o autor: às vezes eles vêm diferentes do que está na capa.`);
+    if (ED.isNew) {
+      $('#edT').value = r.title; if (r.author) $('#edA').value = r.author;
+      isbnMsg(`Achei no ${r.source}. Confira o título e o autor: às vezes eles vêm diferentes do que está na capa.`);
+    } else { // a book already in stock keeps its title and author; the ISBN only brings that edition's cover
+      if (!$('#edT').value.trim()) $('#edT').value = r.title; if (!$('#edA').value.trim() && r.author) $('#edA').value = r.author;
+      isbnMsg(r.cover ? `Achei a capa dessa edição no ${r.source}. Toque em Salvar pra ficar com ela.` : `Achei esse ISBN no ${r.source}, mas sem foto da capa.`);
+    }
     onTyped();
   };
   const isbnEl = $('#edI');
