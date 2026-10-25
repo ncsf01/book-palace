@@ -396,13 +396,28 @@ async function findCovers() {
   readFields(); const b = ED.b, panel = $('#edCovers');
   if (!b.title.trim()) { panel.innerHTML = `<p class="hint">Escreva o título primeiro.</p>`; return; }
   panel.innerHTML = `<p class="hint">Procurando capas de “${esc(b.title)}”…</p>`;
-  let results = [];
-  try { results = await searchBooks(b.title, b.author); } catch (e) { if (ED && ED.b === b) panel.innerHTML = `<p class="hint">Não consegui procurar agora. Confira a internet.</p>`; return; }
+  let results = [], failed = false;
+  try { results = await searchBooks(b.title, b.author); } catch (e) { failed = true; }
   if (!ED || ED.b !== b) return;
-  if (!results.length) { panel.innerHTML = `<p class="hint">Não achei capa desse livro no Google Books nem no Open Library.</p>`; return; }
-  panel.innerHTML = `<p class="hint">Toque na capa certa:</p><div class="covergrid">${results.map((r, i) => `<button class="coverpick" data-i="${i}"><img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span>${esc(r.title)}</span><small>${esc(r.author)}${r.pages ? ` · ${r.pages} p.` : ''}</small></button>`).join('')}</div><button class="btn link" id="coverNone">Nenhuma dessas</button>`;
+  let h = failed ? `<p class="hint">Não consegui procurar nos catálogos agora.</p>`
+    : !results.length ? `<p class="hint">Não achei capa desse livro no Google Books nem no Open Library.</p>`
+    : `<p class="hint">Toque na capa certa:</p><div class="covergrid">${results.map((r, i) => `<button class="coverpick" data-i="${i}"><img src="${esc(r.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span>${esc(r.title)}</span><small>${esc(r.author)}${r.pages ? ` · ${r.pages} p.` : ''}</small></button>`).join('')}</div>`;
+  // Not there? Search Google Images in a new tab, copy the image address and paste it here.
+  const q = encodeURIComponent(`${b.title.replace(/\(.*?\)/g, '')} ${b.author} livro`);
+  h += `<div class="pastebox"><p class="hint">Não achou a sua? Procure no Google Imagens, toque e segure na capa certa, escolha <b>Copiar endereço da imagem</b> e cole aqui:</p><div class="isbnrow"><a class="btn" href="https://www.google.com/search?tbm=isch&q=${q}" target="_blank" rel="noopener">Google Imagens</a><input id="coverUrl" inputmode="url" autocomplete="off" placeholder="https://…"><button class="btn" id="coverUse">Usar</button></div><div id="coverUrlMsg" class="isbnmsg"></div></div><button class="btn link" id="coverNone">Fechar</button>`;
+  panel.innerHTML = h;
   panel.querySelectorAll('.coverpick').forEach(x => x.onclick = () => { const r = results[+x.dataset.i]; b.cover = r.cover; b.coverTried = false; if (r.pages) b.pages = r.pages; panel.innerHTML = ''; drawCover(); });
   $('#coverNone').onclick = () => { panel.innerHTML = ''; };
+  $('#coverUse').onclick = () => {
+    const url = $('#coverUrl').value.trim(), msg = t => { $('#coverUrlMsg').textContent = t; };
+    if (url.startsWith('data:')) { msg('Esse endereço é de uma miniatura embutida. Abra a imagem maior no Google Imagens e copie o endereço dela.'); return; }
+    if (!/^https:\/\/\S+$/.test(url)) { msg('Cole um endereço de imagem que comece com https://'); return; }
+    msg('Abrindo a imagem…');
+    const test = new Image(); test.referrerPolicy = 'no-referrer';
+    test.onload = () => { if (!ED || ED.b !== b) return; b.cover = url; b.coverTried = false; panel.innerHTML = ''; drawCover(); };
+    test.onerror = () => msg('Não consegui abrir essa imagem. Tente copiar o endereço de outra.');
+    test.src = url;
+  };
 }
 function readFields() { const b = ED.b, g = id => $('#' + id); if (!g('edT')) return; b.title = g('edT').value; b.author = g('edA').value; b.category = g('edC').value; b.note = g('edN').value; b.series = g('edS').value; b.volume = parseInt(g('edV').value, 10) || 0; if (g('edI')) b.isbn = cleanIsbn(g('edI').value); }
 // The part of the editor that changes while typing (duplicate warning, place, suggestions),
