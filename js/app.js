@@ -6,7 +6,7 @@
 import { CATEGORIES, DEFAULT_ROWS } from './config.js';
 import { openStore } from './store.js';
 import { normalize, titleKey, authorKey, buildSortKey, compareKeys, initialOf } from './sort.js';
-import { cleanIsbn, isIsbn, lookupIsbn, searchBooks, findCover } from './catalog.js';
+import { cleanIsbn, isIsbn, lookupIsbn, searchBooks, findCover, googlePauseLeft } from './catalog.js';
 
 const S = { store: null, user: undefined, shelves: {}, loaded: false, current: null, view: 'rows', query: '', books: [], byId: {}, noAccess: false, failed: false, sortKey: null };
 const $ = s => document.querySelector(s);
@@ -122,7 +122,7 @@ function renderShelf() {
   const id = S.current;
   if (!id || !S.shelves[id]) return `<div class="state"><h2>Nenhuma estante ainda</h2><p>Crie a primeira estante ou importe um backup do estoque.</p>${canEdit() ? `<button class="btn blue" id="createFirst">Criar estante</button> <button class="btn" data-action="import">Importar backup</button>` : ''}</div>`;
   const lists = rowLists(id); const n = lists.length - 1; const all = S.books.filter(b => b.shelf === id); const w = canEdit();
-  let h = `<div class="shelfbar"><div><div class="eyebrow">Estante</div><h2>${esc(shelfName(id))}</h2><div class="meta">${countCopies(all)} livros · ${all.length} títulos · ${n} ${n > 1 ? 'fileiras' : 'fileira'}<span id="coverStatus"></span></div></div><div class="acts"><div class="seg" role="group" aria-label="Modo de ver"><button data-view="rows" class="${S.view === 'rows' ? 'on' : ''}">Fileiras</button><button data-view="az" class="${S.view === 'az' ? 'on' : ''}">Ordem A–Z</button><button data-view="shelf" class="${S.view === 'shelf' ? 'on' : ''}">Estante</button></div>${w ? `<button class="btn" id="rowAdd">+ Fileira</button><button class="btn" id="rowRemove" ${lists[n].length || n <= 1 ? 'disabled' : ''} title="Só dá pra tirar a última fileira quando ela está vazia">− Fileira</button><button class="btn" id="editShelf">Editar estante</button>` : ''}</div></div>`;
+  let h = `<div class="shelfbar"><div><div class="eyebrow">Estante</div><h2>${esc(shelfName(id))}</h2><div class="meta">${countCopies(all)} livros · ${all.length} títulos · ${n} ${n > 1 ? 'fileiras' : 'fileira'}<span id="coverStatus">${esc(COVERS.status || '')}</span></div></div><div class="acts"><div class="seg" role="group" aria-label="Modo de ver"><button data-view="rows" class="${S.view === 'rows' ? 'on' : ''}">Fileiras</button><button data-view="az" class="${S.view === 'az' ? 'on' : ''}">Ordem A–Z</button><button data-view="shelf" class="${S.view === 'shelf' ? 'on' : ''}">Estante</button></div>${w ? `<button class="btn" id="rowAdd">+ Fileira</button><button class="btn" id="rowRemove" ${lists[n].length || n <= 1 ? 'disabled' : ''} title="Só dá pra tirar a última fileira quando ela está vazia">− Fileira</button><button class="btn" id="editShelf">Editar estante</button>` : ''}</div></div>`;
   if (!all.length) return h + `<div class="state"><h2>Estante vazia</h2><p>${w ? 'Toque em “+ Livro” pra colocar o primeiro livro aqui, ou mude livros de outra estante pra cá.' : 'Ainda não tem livros aqui.'}</p></div>`;
   if (S.view === 'shelf') return h + renderBookcase(lists);
   if (S.view === 'az') {
@@ -197,24 +197,38 @@ const loginScreen = () => `<div class="login"><div class="brand">Palácio dos Li
 // While a shelf is on screen, books without a cover are looked up one at a time (title and
 // author) and the results are saved in small batches. Books with no match are marked, so they
 // are not looked up again; "Procurar capa" in the editor can still try by hand.
-const COVERS = { running: false, tried: new Set(), found: new Map(), timer: null, offline: false };
+const COVERS = { running: false, tried: new Set(), found: new Map(), timer: null, offline: false, added: 0 };
 function coverCandidates() { return S.books.filter(b => b.shelf === S.current && !b.cover && !b.coverTried && !COVERS.tried.has(b.id)); }
-function showCoverStatus(text) { const el = $('#coverStatus'); if (el) el.textContent = text ? ` · ${text}` : ''; }
+let statusTimer = null;
+// The status stays in COVERS.status so that it survives the shelf being drawn again.
+function showCoverStatus(text, forMs) { clearTimeout(statusTimer); COVERS.status = text ? ` · ${text}` : ''; const el = $('#coverStatus'); if (el) el.textContent = COVERS.status; if (text && forMs) statusTimer = setTimeout(() => showCoverStatus(''), forMs); }
 function startCoverSearch() {
   if (COVERS.running || COVERS.offline || !canEdit() || !S.current) return;
   if (!coverCandidates().length) return;
-  COVERS.running = true; coverStep();
+  COVERS.running = true; COVERS.added = 0; coverStep();
+}
+function stopCoverSearch() {
+  COVERS.running = false; flushCovers();
+  showCoverStatus(COVERS.added ? `${COVERS.added} ${COVERS.added === 1 ? 'capa nova' : 'capas novas'}` : '', 8000);
 }
 async function coverStep() {
+  const pause = googlePauseLeft();
+  if (pause) { flushCovers(); showCoverStatus('o Google Books pediu uma pausa, continuo daqui a pouco'); setTimeout(coverStep, pause + 500); return; }
   const next = canEdit() ? coverCandidates()[0] : null;
-  if (!next) { COVERS.running = false; showCoverStatus(''); flushCovers(); return; }
-  const left = coverCandidates().length;
-  showCoverStatus(`buscando capas (faltam ${left})`);
+  if (!next) { stopCoverSearch(); return; }
+  showCoverStatus(`buscando capas (faltam ${coverCandidates().length})`);
   COVERS.tried.add(next.id);
-  try { COVERS.found.set(next.id, (await findCover(next)) || { none: true }); }
-  catch (e) { COVERS.offline = true; COVERS.running = false; showCoverStatus(''); flushCovers(); return; } // no internet: try again next time the app opens
+  let r;
+  try { r = await findCover(next); }
+  catch (e) { COVERS.offline = true; stopCoverSearch(); return; } // no internet: try again next time the app opens
+  if (!(r && r.unsure)) { COVERS.found.set(next.id, r || { none: true }); if (r && r.cover) COVERS.added++; } // "unsure" books are not marked
   if (COVERS.found.size >= 8) flushCovers(); else { clearTimeout(COVERS.timer); COVERS.timer = setTimeout(flushCovers, 4000); }
-  setTimeout(coverStep, 700);
+  setTimeout(coverStep, 1200);
+}
+// "Procurar de novo" in the shelf editor: books marked as having no cover are looked up again.
+async function retryCovers(shelfId) {
+  await updateShelf(shelfId, d => { d.books.forEach(x => { if (x.coverTried) { delete x.coverTried; COVERS.tried.delete(x.id); } }); return d; });
+  COVERS.offline = false;
 }
 async function flushCovers() {
   clearTimeout(COVERS.timer); if (!COVERS.found.size || !canEdit()) return;
@@ -618,6 +632,8 @@ function openShelfEditor(id) {
   const list = shelfList(); const pos = list.findIndex(x => x.id === id);
   let h = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle"><div class="grab"></div><div class="sheeth"><h2 id="shTitle">${isNew ? 'Nova estante' : 'Editar estante'}</h2><button class="x" id="close" aria-label="Fechar">×</button></div>`;
   h += `<label class="field"><span>Nome da estante</span><input id="shName" value="${esc(s.name)}" placeholder="Ex.: Amarela, Branca grande"></label>`;
+  const noCover = isNew ? 0 : s.books.filter(b => b.coverTried && !b.cover).length;
+  if (noCover) h += `<div class="sug small"><div>${noCover} ${noCover === 1 ? 'livro ficou' : 'livros ficaram'} sem capa porque a busca não achou.</div><button class="btn" id="shRetry">Procurar de novo</button></div>`;
   if (isNew) h += `<div class="field"><span>Fileiras</span><div class="stepper"><button class="sb" id="rMinus" aria-label="Menos uma fileira">−</button><span class="val" id="rVal">${s.rows}</span><button class="sb" id="rPlus" aria-label="Mais uma fileira">+</button></div></div>`;
   else h += `<div class="field"><span>Posição na lista de estantes</span><div class="stepper"><button class="btn" id="shLeft" ${pos <= 0 ? 'disabled' : ''}>← Mais pra esquerda</button><button class="btn" id="shRight" ${pos >= list.length - 1 ? 'disabled' : ''}>Mais pra direita →</button></div></div>`;
   h += `<div class="sheetf"><button class="btn blue" id="shSave">${isNew ? 'Criar estante' : 'Salvar'}</button>${!isNew ? (s.books.length ? `<p class="hint">Pra apagar esta estante, primeiro tire ou mude os livros dela de lugar.</p>` : `<button class="btn danger" id="shDelete">Apagar estante</button>`) : ''}</div></div></div>`;
@@ -632,6 +648,7 @@ function openShelfEditor(id) {
     try { await S.store.update(ids, docs => docs.map((d, i) => { if (!d) return null; d.order = order.indexOf(ids[i]); return d; })); closeLayer(); } catch (e) { toast(errorMessage(e)); }
   };
   on('shLeft', () => swap(-1)); on('shRight', () => swap(1));
+  on('shRetry', async () => { try { await retryCovers(id); closeLayer(); toast('Vou procurar de novo as capas que faltam nesta estante.'); } catch (e) { toast(errorMessage(e)); } });
   on('shSave', async () => {
     const name = $('#shName').value.trim(); if (!name) { toast('Dê um nome pra estante.'); $('#shName').focus(); return; }
     try {

@@ -12,12 +12,16 @@ export const isIsbn = v => /^(\d{9}[\dX]|97[89]\d{10})$/.test(v);
 const joinAuthors = list => (list.length > 2 ? list.slice(0, -1).join(', ') + ' e ' + list[list.length - 1] : list.join(' e '));
 const withSubtitle = v => (v.subtitle ? `${v.title}: ${v.subtitle}` : v.title);
 
-// When Google Books refuses (too many requests from this connection), stop asking it for a while.
+// A catalog that could not be reached, or that asked us to slow down, throws Unreachable.
+// Google Books has a usage limit for apps without a key: when it says "too many requests",
+// it is left alone for two minutes.
+class Unreachable extends Error {}
 let googlePausedUntil = 0;
+export const googlePauseLeft = () => Math.max(0, googlePausedUntil - Date.now());
 async function getJson(url, google) {
-  if (google && Date.now() < googlePausedUntil) return null;
-  const r = await fetch(url);
-  if (google && (r.status === 429 || r.status === 403)) { googlePausedUntil = Date.now() + 10 * 60 * 1000; return null; }
+  if (google && googlePauseLeft()) throw new Unreachable('paused');
+  let r; try { r = await fetch(url); } catch (e) { throw new Unreachable('offline'); }
+  if (r.status === 429 || r.status === 403 || r.status >= 500) { if (google) googlePausedUntil = Date.now() + 2 * 60 * 1000; throw new Unreachable('status ' + r.status); }
   return r.ok ? r.json() : null;
 }
 
@@ -44,11 +48,14 @@ export async function lookupIsbn(isbn) {
   return null;
 }
 
-// Books matching a title and author, only the ones with a cover. Each search throws when the
-// connection fails, so callers can tell "nothing found" from "offline".
-const cleanTitle = t => String(t || '').replace(/\(.*?\)/g, '').trim();
+// What is searched: the main title (no notes in parentheses, no subtitle) and the author's last
+// name, which also works for "Allan e Barbara Pease" or "org. Alex Mir".
+const mainTitle = t => String(t || '').replace(/\(.*?\)/g, '').split(':')[0].trim();
+const lastName = a => { const w = String(a || '').replace(/[()[\].,;]/g, ' ').trim().split(/\s+/).filter(Boolean); return w.length ? w[w.length - 1] : ''; };
+
+// Books matching a title and author, only the ones with a cover.
 async function searchGoogle(title, author) {
-  const q = `intitle:"${title}"` + (author ? ` inauthor:"${author}"` : '');
+  const q = `intitle:"${title}"` + (author ? ` inauthor:${author}` : '');
   const j = await getJson(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=10&printType=books`, true);
   return ((j && j.items) || []).map(it => fromGoogle(it.volumeInfo || {})).filter(b => b.title && b.cover);
 }
@@ -56,11 +63,11 @@ async function searchOpenLibrary(title, author) {
   const j = await getJson(`https://openlibrary.org/search.json?title=${encodeURIComponent(title)}${author ? `&author=${encodeURIComponent(author)}` : ''}&limit=10&fields=title,subtitle,author_name,cover_i,number_of_pages_median`);
   return ((j && j.docs) || []).filter(d => d.cover_i && d.title).map(d => ({ title: withSubtitle(d), author: joinAuthors(d.author_name || []), cover: openLibraryCover(d.cover_i), pages: d.number_of_pages_median || 0, source: 'Open Library' }));
 }
-// Both catalogs together, for "Procurar capa" in the editor.
+// Both catalogs together, for "Procurar capa" in the editor. Throws when neither answers.
 export async function searchBooks(title, author, limit = 8) {
-  const t = cleanTitle(title), a = String(author || '').trim(); if (!t) return [];
+  const t = mainTitle(title), a = lastName(author); if (!t) return [];
   const all = await Promise.allSettled([searchGoogle(t, a), searchOpenLibrary(t, a)]);
-  if (all.every(r => r.status === 'rejected')) throw new Error('offline');
+  if (all.every(r => r.status === 'rejected')) throw new Unreachable('both');
   const seen = new Set();
   return all.flatMap(r => (r.status === 'fulfilled' ? r.value : [])).filter(b => !seen.has(b.cover) && seen.add(b.cover)).slice(0, limit);
 }
@@ -68,23 +75,27 @@ export async function searchBooks(title, author, limit = 8) {
 // The words of a name or title, without accents, punctuation or short words.
 const words = s => normalize(s).replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 2);
 
-// Best cover for a book already in the stock, or null. Google Books first, Open Library only when
-// Google has no match. To avoid putting another book's cover, the found title must start like the
-// book's title, and the author must share a name with it.
+// Best cover for a book already in the stock. Google Books first, Open Library only when Google
+// has no match. To avoid another book's cover, the found title must start like the book's title
+// and the author must share a name with it. Returns:
+//   {cover, pages}   a match;
+//   null             both catalogs answered and neither has it;
+//   {unsure: true}   no match, but a catalog didn't answer (so it's worth trying again later).
+// Throws when neither catalog can be reached.
 export async function findCover(book) {
-  const t = cleanTitle(book.title), a = String(book.author || '').trim(); if (!t) return null;
-  const mine = titleKey(t.split(':')[0]), myNames = words(a);
+  const t = mainTitle(book.title), a = lastName(book.author); if (!t) return null;
+  const mine = titleKey(t), myNames = words(book.author);
   const pick = list => list.find(r => {
-    const theirs = titleKey(r.title.split(':')[0]);
+    const theirs = titleKey(mainTitle(r.title));
     const same = theirs === mine || (mine.length >= 4 && theirs.startsWith(mine)) || (theirs.length >= 4 && mine.startsWith(theirs));
     if (!mine || !theirs || !same) return false;
     if (!myNames.length) return true;
     const their = words(r.author); return myNames.some(w => their.includes(w));
   });
-  let failures = 0;
+  let failed = 0;
   for (const search of [searchGoogle, searchOpenLibrary]) {
-    try { const m = pick(await search(t, a)); if (m) return { cover: m.cover, pages: m.pages || 0 }; } catch (e) { failures++; }
+    try { const m = pick(await search(t, a)); if (m) return { cover: m.cover, pages: m.pages || 0 }; } catch (e) { failed++; }
   }
-  if (failures === 2) throw new Error('offline');
-  return null;
+  if (failed === 2) throw new Unreachable('both');
+  return failed ? { unsure: true } : null;
 }
