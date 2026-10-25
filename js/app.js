@@ -42,11 +42,17 @@ function rowLists(shelfId, excludeId) {
   (d.books || []).forEach(raw => { if (raw.id === excludeId) return; const b = S.byId[raw.id] || raw; const r = (b.row >= 1 && b.row <= n) ? b.row : (b.row > n ? n : 0); lists[r].push(b); });
   return lists;
 }
+// Positions count copies: a book with 3 copies takes 3 places on the shelf, so the book after it
+// is 4 places further along. slotOf gives the first place of the book at `index` in a row.
+function slotOf(list, index) { let n = 1; for (let i = 0; i < index && i < list.length; i++) n += list[i].copies || 1; return n; }
+const placeText = (start, copies) => ((copies || 1) > 1 ? `${start}º a ${start + copies - 1}º` : `${start}º`);
+const placeShort = (start, copies) => ((copies || 1) > 1 ? `${start}–${start + copies - 1}` : `${start}`);
 function locate(b) {
   const lists = rowLists(b.shelf); const row = Math.max(0, lists.findIndex(l => l.some(x => x.id === b.id)));
   const index = lists[row].findIndex(x => x.id === b.id);
   if (!row) return { row: 0, index, text: shelfName(b.shelf) + ' · sem fileira' };
-  return { row, index, text: `${shelfName(b.shelf)} · fileira ${row} · ${index + 1}º` };
+  const slot = slotOf(lists[row], index);
+  return { row, index, slot, place: placeText(slot, b.copies), text: `${shelfName(b.shelf)} · fileira ${row} · ${placeText(slot, b.copies)}` };
 }
 
 /* ---------- suggestions ---------- */
@@ -59,8 +65,8 @@ function suggestPosition(draft, shelfId) {
   if (!placed.length) return { row: 1, index: 0, text: 'Ainda não tem livro arrumado nessa estante. Sugestão: fileira 1, primeira posição.' };
   let prev = null, first = null;
   placed.forEach(p => { if (compareKeys(p.b._key, k) <= 0 && (!prev || compareKeys(p.b._key, prev.b._key) > 0)) prev = p; if (!first || compareKeys(p.b._key, first.b._key) < 0) first = p; });
-  if (prev) return { row: prev.row, index: prev.index + 1, text: `Fileira ${prev.row}, posição ${prev.index + 2}: logo depois de <b>${esc(prev.b.title)}</b> (${esc(prev.b.author)}).` };
-  return { row: first.row, index: first.index, text: `Fileira ${first.row}, posição ${first.index + 1}: logo antes de <b>${esc(first.b.title)}</b> (${esc(first.b.author)}).` };
+  if (prev) return { row: prev.row, index: prev.index + 1, text: `Fileira ${prev.row}, posição ${slotOf(lists[prev.row], prev.index + 1)}: logo depois de <b>${esc(prev.b.title)}</b> (${esc(prev.b.author)}).` };
+  return { row: first.row, index: first.index, text: `Fileira ${first.row}, posição ${slotOf(lists[first.row], first.index)}: logo antes de <b>${esc(first.b.title)}</b> (${esc(first.b.author)}).` };
 }
 // Which shelf a new book probably belongs to: where its author's other books are,
 // or else where most books of its category are.
@@ -128,7 +134,7 @@ function renderShelf() {
   if (S.view === 'az') {
     const sorted = [...all].sort(byKey); let cur = '', i = 0;
     h += `<p class="hint">Todos os livros desta estante na ordem A–Z, pelo nome do autor como está na capa. Use pra arrumar ou conferir: comece na fileira de cima, da esquerda pra direita.</p><div class="list">`;
-    sorted.forEach(b => { const l = initialOf(b._key); if (l !== cur) { cur = l; h += `<div class="letter">${l}</div>`; } i++; const loc = locate(b); h += bookButton(b, i, `<span class="bl">${loc.row ? `fileira ${loc.row} · ${loc.index + 1}º` : 'sem fileira'}</span>`); });
+    sorted.forEach(b => { const l = initialOf(b._key); if (l !== cur) { cur = l; h += `<div class="letter">${l}</div>`; } i++; const loc = locate(b); h += bookButton(b, i, `<span class="bl">${loc.row ? `fileira ${loc.row} · ${loc.place}` : 'sem fileira'}</span>`); });
     return h + '</div>';
   }
   const cols = []; if (lists[0].length) cols.push(0); for (let r = 1; r <= n; r++) cols.push(r);
@@ -139,7 +145,7 @@ function renderShelf() {
     const l = lists[r];
     h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${booksWord(countCopies(l))}</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
     if (!r) h += `<div class="colnote">Livros que ainda não estão numa fileira. ${drag ? 'Arraste pra mudar a ordem ou pra levar até uma fileira.' : 'Toque num livro pra escolher a fileira e a posição, ou use “Arrumar”.'} “Ordenar” põe a lista por autor, título ou categoria.</div>`;
-    h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? i + 1 : '')).join('') : `<div class="emptycol">${w ? (drag ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia. Use “Arrumar” ou toque num livro pra trazer ele pra cá.') : 'Fileira vazia.'}</div>`}</div></section>`;
+    h += `<div class="drop" data-shelf="${esc(id)}" data-row="${r}">${l.length ? l.map((b, i) => bookButton(b, r ? placeShort(slotOf(l, i), b.copies) : '')).join('') : `<div class="emptycol">${w ? (drag ? 'Fileira vazia. Arraste livros pra cá ou use “Arrumar”.' : 'Fileira vazia. Use “Arrumar” ou toque num livro pra trazer ele pra cá.') : 'Fileira vazia.'}</div>`}</div></section>`;
   });
   return h + '</div>';
 }
@@ -430,6 +436,7 @@ function drawEditorDynamic() {
   const n = b.shelf ? Math.max(1, S.shelves[b.shelf].rows || 1) : 0;
   if (b.row > n) b.row = n;
   const len = editorRowLength(); b.index = Math.max(0, Math.min(b.index || 0, len));
+  const rowList = b.shelf ? (rowLists(b.shelf, b.id)[b.row || 0] || []) : [];
   const bare = t => titleKey(String(t).replace(/\(.*?\)/g, ''));
   const sameIsbn = isNew && isIsbn(cleanIsbn(b.isbn)) ? S.books.find(x => x.isbn && cleanIsbn(x.isbn) === cleanIsbn(b.isbn)) : null;
   const dup = sameIsbn || (isNew && b.title.trim().length > 2 ? S.books.find(x => bare(x.title) === bare(b.title) && (!b.author.trim() || authorKey(x.author) === authorKey(b.author))) : null);
@@ -441,7 +448,7 @@ function drawEditorDynamic() {
   else if (isNew && !b.shelf) h += `<p class="hint">Escreva o autor ou escolha a categoria que eu sugiro a estante.</p>`;
   if (b.shelf) {
     h += `<div class="field"><span>Fileira</span><div class="chips" id="edRow"><button class="chip ${!b.row ? 'on' : ''}" data-row="0" ${ro ? 'disabled' : ''}>Sem fileira</button>${Array.from({ length: n }, (_, i) => `<button class="chip ${b.row === i + 1 ? 'on' : ''}" data-row="${i + 1}" ${ro ? 'disabled' : ''}>${i + 1}</button>`).join('')}</div></div>`;
-    h += `<div class="field"><span>${b.row ? 'Posição na fileira, contando da esquerda' : 'Posição na lista do Sem fileira'}</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${b.index + 1}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${len + 1}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
+    h += `<div class="field"><span>${b.row ? 'Posição na fileira, contando da esquerda' : 'Posição na lista do Sem fileira'}</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${slotOf(rowList, b.index)}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${countCopies(rowList) + (b.copies || 1)}${(b.copies || 1) > 1 ? `, ocupa até o ${slotOf(rowList, b.index) + b.copies - 1}º` : ''}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
     if (sug && !ro) h += `<div class="sug small"><div>Pela ordem A–Z: ${sug.text}</div><button class="btn" id="useSuggestion">Usar essa posição</button></div>`;
   }
   if (!ro && !isNew) h += `<div class="sheetf">${ED.confirmDelete ? `<div class="confirm">Tirar este livro do estoque? <button class="btn" id="deleteYes" style="color:var(--red)">Sim, tirar</button><button class="btn" id="deleteNo">Não</button></div>` : `<button class="btn danger" id="delete">Tirar do estoque (vendido ou doado)</button>`}</div>`;
@@ -482,7 +489,7 @@ async function saveEditor() {
     const keepCover = list => { const cur = list.find(x => x.id === b.id); if (cur && cur.cover && !b.cover && !b.coverTried) { b.cover = cur.cover; if (!b.pages) b.pages = cur.pages; } };
     if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { keepCover(d.books); d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
     else await updateTwoShelves(shelf, original.shelf, (to, from) => { keepCover(from.books); from.books = from.books.filter(x => x.id !== b.id); to.books = to.books.filter(x => x.id !== b.id); insertBook(to.books, b, row, index); return [to, from]; });
-    const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${index + 1}º` : ' · sem fileira'}`;
+    const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${placeText(slotOf(rowLists(shelf, b.id)[row] || [], index), b.copies)}` : ' · sem fileira'}`;
     closeLayer();
     if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
     else toast(`Salvo: ${b.title} · ${where}`);
@@ -718,7 +725,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 function exportCsv() {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const lines = [['Estante', 'Fileira', 'Posição', 'Título', 'Autor', 'Categoria', 'Exemplares', 'Série', 'Volume', 'Observação', 'ISBN'].map(q).join(';')];
-  shelfList().forEach(s => rowLists(s.id).forEach((l, row) => l.forEach((b, i) => lines.push([s.name, row || 'sem fileira', row ? i + 1 : '', b.title, b.author, category(b.category)[0], b.copies || 1, b.series || '', b.volume || '', b.note || '', b.isbn || ''].map(q).join(';')))));
+  shelfList().forEach(s => rowLists(s.id).forEach((l, row) => l.forEach((b, i) => lines.push([s.name, row || 'sem fileira', row ? slotOf(l, i) : '', b.title, b.author, category(b.category)[0], b.copies || 1, b.series || '', b.volume || '', b.note || '', b.isbn || ''].map(q).join(';')))));
   download(`book-palace-${today()}.csv`, '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 }
 function exportJson() {
