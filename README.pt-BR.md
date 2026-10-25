@@ -13,7 +13,7 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 ## O que ele faz
 
 - **Estantes como "stories"**: cada estante aparece no topo com o número de livros dela.
-- **Fileiras lado a lado**: cada fileira vira uma coluna, e os livros aparecem de cima pra baixo na mesma ordem em que estão da esquerda pra direita na estante.
+- **Fileiras lado a lado**: cada fileira vira uma coluna, e os livros aparecem de cima pra baixo na mesma ordem em que estão da esquerda pra direita na estante. No computador, as setas e a roda do mouse em cima da barra das fileiras pulam de uma fileira pra outra.
 - **Mudar livros de lugar**: no celular, toque no livro e escolha a estante, a fileira e a posição. No computador, também dá pra arrastar com o mouse pra outra posição ou fileira, e a barra que aparece embaixo manda o livro pra outra estante.
 - **Livros sem fileira** ficam numa lista à parte. Dá pra mudar a ordem pela edição do livro ou arrastando, ou ordenar por autor, título ou categoria.
 - **Arrumar sem digitar**: depois de arrumar uma fileira de verdade, toque no último livro dela e todos os anteriores dessa lista vão pra essa fileira, na mesma ordem. Também dá pra tocar um por um.

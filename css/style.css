@@ -159,3 +159,12 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .savebar .btn.blue{width:100%;padding:14px;font-size:16px}
 .sumv{color:var(--muted);font-weight:400}
 .sug.small{padding:10px 12px;gap:6px;font-size:13px}
+.jumpbar{display:flex;align-items:center;gap:6px}
+.jumpbar .jump{flex:1 1 auto;min-width:0}
+.jarrow{display:none;flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--bg);font-size:24px;line-height:1;padding:0 0 4px;margin-bottom:8px}
+.jarrow:disabled{opacity:.35;cursor:default}
+.pill.on{background:var(--fg);border-color:var(--fg);color:var(--ink-on)}
+@media (hover:hover) and (pointer:fine){
+  .jarrow{display:grid;place-items:center}
+  .jumpbar{position:sticky;top:var(--headH,108px);z-index:4;background:var(--bg);padding-top:8px}
+}

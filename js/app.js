@@ -130,7 +130,7 @@ function renderShelf() {
   const cols = []; if (lists[0].length) cols.push(0); for (let r = 1; r <= n; r++) cols.push(r);
   const drag = w && canDrag();
   if (w) h += `<p class="hint">${drag ? 'Clique num livro pra editar. Pra mudar de lugar, arraste o livro pra outra posição, outra fileira ou, pela barra de baixo, outra estante.' : 'Toque num livro pra editar ou pra mudar ele de estante, fileira ou posição.'}</p>`;
-  h += `<div class="jump" role="group" aria-label="Ir pra fileira">${cols.map(r => `<button class="pill" data-jump="${r}">${r ? 'Fileira ' + r : 'Sem fileira'} · <b>${countCopies(lists[r])}</b></button>`).join('')}</div><div class="board" id="board">`;
+  h += `<div class="jumpbar"><button class="jarrow" data-step="-1" aria-label="Fileira anterior">‹</button><div class="jump" role="group" aria-label="Ir pra fileira">${cols.map(r => `<button class="pill" data-jump="${r}">${r ? 'Fileira ' + r : 'Sem fileira'} · <b>${countCopies(lists[r])}</b></button>`).join('')}</div><button class="jarrow" data-step="1" aria-label="Próxima fileira">›</button></div><div class="board" id="board" data-shelf="${esc(id)}">`;
   cols.forEach(r => {
     const l = lists[r];
     h += `<section class="col ${r ? '' : 'loose'}" id="col${r}" aria-label="${r ? 'Fileira ' + r : 'Sem fileira'}"><div class="colh"><h3>${r ? 'Fileira ' + r : 'Sem fileira'}<span class="n">${countCopies(l)} livros</span></h3><span class="colacts">${w && !r && l.length > 1 ? `<button class="btn link" data-sort-open>Ordenar</button>` : ''}${w && lists[0].length ? `<button class="btn link" data-arrange="${r || 1}">Arrumar</button>` : ''}</span></div>`;
@@ -160,11 +160,50 @@ function render() {
   if (S.noAccess) { main.innerHTML = `<div class="state"><h2>Seu e-mail ainda não tem acesso</h2><p>Você entrou como <b>${esc(S.user.email)}</b>. Peça pra quem cuida do estoque incluir esse e-mail nas regras do Firebase. Depois é só abrir a página de novo.</p><button class="btn" data-action="signout">Entrar com outra conta</button></div>`; return; }
   if (S.failed) { main.innerHTML = `<div class="state"><h2>Não deu pra abrir o estoque</h2><p>Confira a internet e recarregue a página.</p></div>`; return; }
   if (!S.loaded) return;
+  const oldBoard = $('#board'); const keepLeft = oldBoard && oldBoard.dataset.shelf === S.current ? oldBoard.scrollLeft : 0;
   main.innerHTML = S.query ? renderSearch() : renderShelf();
+  const board = $('#board');
+  if (board) { setHeaderHeight(); board.scrollLeft = keepLeft; board.addEventListener('scroll', markCurrentColSoon, { passive: true }); markCurrentCol(); }
   $('#legend').innerHTML = Object.values(CATEGORIES).map(([n, c]) => `<span><i style="background:${c}"></i>${esc(n)}</span>`).join('');
   $('#foot').innerHTML = `<span>${S.store.mode === 'demo' ? 'Modo demonstração: os dados ficam só neste navegador.' : 'Salvo online: o que você muda aparece em todos os aparelhos.'}</span><button class="btn link" data-action="csv">Baixar planilha (CSV)</button><button class="btn link" data-action="json">Baixar backup</button>${canEdit() ? '<button class="btn link" data-action="import">Importar backup</button>' : ''}`;
 }
 const loginScreen = () => `<div class="login"><div class="brand">Palácio dos Livros</div><p>Entre com a sua conta Google pra ver e editar o estoque.</p><button class="btn blue" data-action="signin" style="padding:14px 20px;font-size:16px">Entrar com Google</button></div>`;
+
+/* ---------- moving between rows ---------- */
+// The rows of a shelf are columns side by side. On a computer, the arrows and the mouse
+// wheel over the row bar or over a column title jump one row at a time.
+const boardCols = () => [...document.querySelectorAll('#board .col')];
+function currentCol() {
+  const bd = $('#board'); let best = 0, dist = Infinity;
+  if (bd) boardCols().forEach((c, i) => { const d = Math.abs(c.offsetLeft - bd.offsetLeft - bd.scrollLeft); if (d < dist) { dist = d; best = i; } });
+  return best;
+}
+function scrollToCol(i) {
+  const bd = $('#board'), cols = boardCols(); if (!bd || !cols.length) return;
+  const c = cols[Math.max(0, Math.min(cols.length - 1, i))]; bd.scrollTo({ left: c.offsetLeft - bd.offsetLeft, behavior: 'smooth' });
+}
+function markCurrentCol() {
+  const bd = $('#board'); if (!bd) return; const box = bd.getBoundingClientRect(); const cols = boardCols();
+  // Highlight the rows that are on screen right now.
+  document.querySelectorAll('.jump .pill').forEach((p, k) => { const r = cols[k] && cols[k].getBoundingClientRect(); p.classList.toggle('on', !!r && r.left >= box.left - 2 && r.right <= box.right + 2); });
+  const prev = $('.jarrow[data-step="-1"]'), next = $('.jarrow[data-step="1"]');
+  if (prev) prev.disabled = bd.scrollLeft <= 2;
+  if (next) next.disabled = bd.scrollLeft + bd.clientWidth >= bd.scrollWidth - 2;
+}
+let markQueued = false;
+function markCurrentColSoon() { if (markQueued) return; markQueued = true; requestAnimationFrame(() => { markQueued = false; markCurrentCol(); }); }
+let wheelLockUntil = 0;
+document.addEventListener('wheel', e => {
+  if (!e.target.closest('.jumpbar, .colh')) return;
+  const bd = $('#board'); if (!bd || bd.scrollWidth <= bd.clientWidth) return;
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (!d) return;
+  e.preventDefault();
+  const now = Date.now(); if (now < wheelLockUntil) return; wheelLockUntil = now + 350; // one row per flick
+  scrollToCol(currentCol() + (d > 0 ? 1 : -1));
+}, { passive: false });
+// The row bar stays under the header on a computer; it needs the header's height.
+const setHeaderHeight = () => { const h = $('header.top'); if (h) document.documentElement.style.setProperty('--headH', h.offsetHeight + 'px'); };
+addEventListener('resize', setHeaderHeight); setHeaderHeight();
 
 /* ---------- book editor (edit and add) ---------- */
 let ED = null;
@@ -538,6 +577,7 @@ document.addEventListener('click', async e => {
   const st = e.target.closest('.story'); if (st) { S.current = st.dataset.shelf; S.query = ''; $('#q').value = ''; $('#qclear').hidden = true; remember(); render(); return; }
   const vw = e.target.closest('[data-view]'); if (vw) { S.view = vw.dataset.view; remember(); render(); return; }
   const jp = e.target.closest('[data-jump]'); if (jp) { const c = $('#col' + jp.dataset.jump), bd = $('#board'); if (c && bd) bd.scrollTo({ left: c.offsetLeft - bd.offsetLeft, behavior: 'smooth' }); return; }
+  const ja = e.target.closest('.jarrow'); if (ja) { scrollToCol(currentCol() + (+ja.dataset.step)); return; }
   const ar = e.target.closest('[data-arrange]'); if (ar) { openArrange(+ar.dataset.arrange); return; }
   if (e.target.closest('[data-sort-open]')) { openSortUnplaced(); return; }
   const bk = e.target.closest('.book'); if (bk) { openEditor(bk.dataset.id); return; }
