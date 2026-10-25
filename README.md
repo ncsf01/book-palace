@@ -19,6 +19,8 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **Arrange without typing**: after tidying a real row, tap its last book and every book before it in that list goes to that row, in the same order. You can also tap them one by one.
 - **Suggested A–Z order**: by the author's name as printed on the cover (Dan Brown files under D). Books by the same author stay together and series follow their volume order.
 - **New books**: the app suggests the shelf (where the author's other books are) and the right A–Z position. If the book is already in stock, it says so and offers to add one more copy.
+- **ISBN and barcode**: type the ISBN, or scan the barcode with the phone camera (Chrome on Android), and the title and author are filled in from Google Books or, if not found there, Open Library. The lookup goes straight from the browser to those services.
+- **Several books in a row**: after a new book is saved, the form opens again on the same shelf, ready for the next one.
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".
 - **Backup**: download the stock as a spreadsheet (CSV) or as a backup file (JSON), and import that backup back.
 - **Live updates**: a change made on one phone shows up right away on the others.

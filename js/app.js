@@ -75,7 +75,7 @@ function guessShelf(draft) {
 const emptyShelf = () => ({ name: 'Estante', order: 999, rows: DEFAULT_ROWS, books: [] });
 async function updateShelf(id, fn) { await S.store.update([id], ([d]) => { const cur = d || emptyShelf(); if (!Array.isArray(cur.books)) cur.books = []; return [fn(cur) || cur]; }); }
 async function updateTwoShelves(a, b, fn) { await S.store.update([a, b], ([da, db]) => fn(da || emptyShelf(), db || emptyShelf())); }
-function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } return o; }
+function cleanBook(b) { const o = { id: b.id, title: b.title, author: b.author || '', category: b.category || 'DIV', copies: Math.max(1, b.copies || 1), row: b.row || 0 }; if (b.note) o.note = b.note; if (b.series) { o.series = b.series; if (b.volume) o.volume = b.volume; } if (b.isbn) o.isbn = String(b.isbn); return o; }
 // Inserts a book into a shelf's array at position `index` of row `row` (row 0 = unplaced).
 function insertBook(list, book, row, index) {
   book = cleanBook({ ...book, row });
@@ -140,7 +140,7 @@ function renderShelf() {
   return h + '</div>';
 }
 function renderSearch() {
-  const q = normalize(S.query); const found = S.books.filter(b => normalize(b.title + ' ' + b.author + ' ' + (b.note || '') + ' ' + (b.series || '')).includes(q)).sort(byKey);
+  const q = normalize(S.query); const found = S.books.filter(b => normalize(b.title + ' ' + b.author + ' ' + (b.note || '') + ' ' + (b.series || '') + ' ' + (b.isbn || '')).includes(q)).sort(byKey);
   let h = `<div class="shelfbar"><div><div class="eyebrow">Busca</div><h2>“${esc(S.query)}”</h2><div class="meta">${found.length ? `${countCopies(found)} livros em ${found.length} ${found.length > 1 ? 'títulos' : 'título'}` : 'nada encontrado'}</div></div></div>`;
   if (!found.length) return h + `<div class="state"><p>Nenhum livro com “${esc(S.query)}”. Confira a grafia ou procure por outra palavra do título ou do autor.</p></div>`;
   return h + `<div class="list">${found.map(b => bookButton(b, '', `<span class="bl">${esc(locate(b).text)}</span>`)).join('')}</div>`;
@@ -205,6 +205,53 @@ document.addEventListener('wheel', e => {
 const setHeaderHeight = () => { const h = $('header.top'); if (h) document.documentElement.style.setProperty('--headH', h.offsetHeight + 'px'); };
 addEventListener('resize', setHeaderHeight); setHeaderHeight();
 
+/* ---------- ISBN: look up title and author, scan the barcode ---------- */
+const cleanIsbn = v => String(v || '').toUpperCase().replace(/[^0-9X]/g, '');
+const isIsbn = v => /^(\d{9}[\dX]|97[89]\d{10})$/.test(v);
+const joinAuthors = list => (list.length > 2 ? list.slice(0, -1).join(', ') + ' e ' + list[list.length - 1] : list.join(' e '));
+// Asks Google Books first and Open Library second. Returns {title, author, source} or null.
+async function lookupIsbn(isbn) {
+  const withSub = v => (v.subtitle ? `${v.title}: ${v.subtitle}` : v.title);
+  try {
+    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+    if (r.ok) { const j = await r.json(); const v = j.items && j.items[0] && j.items[0].volumeInfo; if (v && v.title) return { title: withSub(v), author: joinAuthors(v.authors || []), source: 'Google Books' }; }
+  } catch (e) {}
+  try {
+    const r = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+    if (r.ok) { const j = await r.json(); const v = j['ISBN:' + isbn]; if (v && v.title) return { title: withSub(v), author: joinAuthors((v.authors || []).map(a => a.name)), source: 'Open Library' }; }
+  } catch (e) {}
+  return null;
+}
+// The browser's own barcode reader (Chrome on Android has it; Safari on iPhone does not).
+const canScan = () => 'BarcodeDetector' in window && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+let SCAN = null;
+async function openScanner(onCode) {
+  const box = document.createElement('div'); box.className = 'scanner';
+  box.innerHTML = `<video playsinline muted></video><div class="scanframe"></div><p>Aponte a câmera pro código de barras do livro.</p><button class="btn" id="scanStop">Cancelar</button>`;
+  document.body.appendChild(box);
+  let stream = null, timer = null;
+  const stop = () => { clearTimeout(timer); if (stream) stream.getTracks().forEach(t => t.stop()); box.remove(); SCAN = null; };
+  SCAN = { stop }; box.querySelector('#scanStop').onclick = stop;
+  try {
+    const supported = await BarcodeDetector.getSupportedFormats();
+    const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(f => supported.includes(f));
+    const detector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    if (!SCAN) { stream.getTracks().forEach(t => t.stop()); return; } // cancelled while asking for the camera
+    const video = box.querySelector('video'); video.srcObject = stream; await video.play();
+    const tick = async () => {
+      if (!SCAN) return;
+      try {
+        const codes = (await detector.detect(video)).map(c => cleanIsbn(c.rawValue));
+        const code = codes.find(isIsbn) || codes.find(c => c.length >= 8);
+        if (code) { if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} } stop(); onCode(code); return; }
+      } catch (e) {}
+      timer = setTimeout(tick, 200);
+    };
+    tick();
+  } catch (e) { stop(); toast(e && e.name === 'NotAllowedError' ? 'O navegador não deixou usar a câmera. Libere a câmera pra este site nas configurações.' : 'Não consegui abrir a câmera.'); }
+}
+
 /* ---------- book editor (edit and add) ---------- */
 let ED = null;
 // Redrawing a sheet while a finger or the mouse is pressing one of its buttons would
@@ -216,12 +263,14 @@ const releasePress = () => setTimeout(() => { PRESS.down = false; const f = PRES
 document.addEventListener('pointerup', releasePress, true);
 document.addEventListener('pointercancel', releasePress, true);
 const whenReleased = f => { if (PRESS.down) PRESS.pending = f; else f(); };
-const fieldsSignature = b => [b.title, b.author, b.category, b.note, b.series, b.volume].join('\u0001');
-function openEditor(id) {
+const fieldsSignature = b => [b.title, b.author, b.category, b.note, b.series, b.volume, b.isbn].join('\u0001');
+// opts.shelf starts a new book on that shelf; opts.added is the line telling which book was just added.
+function openEditor(id, opts = {}) {
   const isNew = !id;
-  const b = isNew ? { id: newId('n'), title: '', author: '', category: '', copies: 1, note: '', series: '', volume: 0, shelf: '', row: 0 } : { ...S.byId[id] };
+  const b = isNew ? { id: newId('n'), title: '', author: '', category: '', copies: 1, note: '', series: '', volume: 0, isbn: '', shelf: '', row: 0 } : { ...S.byId[id] };
   if (!isNew) { const loc = locate(b); b.row = loc.row; b.index = loc.index >= 0 ? loc.index : 0; } else b.index = 0;
-  ED = { isNew, original: isNew ? null : { shelf: b.shelf }, b, confirmDelete: false, manualPlace: !isNew };
+  if (isNew && opts.shelf && S.shelves[opts.shelf]) { b.shelf = opts.shelf; const s = suggestPosition(b, b.shelf); b.row = s.row; b.index = s.index; }
+  ED = { isNew, original: isNew ? null : { shelf: b.shelf }, b, confirmDelete: false, manualPlace: !isNew, added: opts.added || '' };
   drawEditor();
 }
 const editorRowLength = () => { const b = ED.b; if (!b.shelf) return 0; return (rowLists(b.shelf, b.id)[b.row || 0] || []).length; };
@@ -230,11 +279,14 @@ function drawEditor() {
   const catOptions = `<option value="">Escolha…</option>` + Object.entries(CATEGORIES).map(([k, [nm]]) => `<option value="${k}" ${b.category === k ? 'selected' : ''}>${esc(nm)}</option>`).join('');
   const authors = [...new Set(S.books.map(x => x.author).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt'));
   let h = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edTitle"><div class="grab"></div><div class="sheeth"><h2 id="edTitle">${isNew ? 'Novo livro' : ro ? 'Livro' : 'Editar livro'}</h2><button class="x" id="close" aria-label="Fechar">×</button></div>`;
+  if (ED.added) h += `<div class="added">✓ ${ED.added} Pode cadastrar o próximo, ou fechar no ×.</div>`;
+  const isbnInput = `<div class="isbnrow"><input id="edI" inputmode="numeric" autocomplete="off" enterkeyhint="search" value="${esc(b.isbn || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: 978…">${ro ? '' : '<button class="btn" id="isbnGo">Buscar</button>'}</div><div id="edIsbnMsg" class="isbnmsg"></div>`;
+  if (isNew) h += `<div class="field"><span>ISBN, o número embaixo do código de barras (opcional)</span>${canScan() ? '<button class="btn scanbtn" id="scan">Escanear código de barras</button>' : ''}${isbnInput}</div>`;
   h += `<label class="field"><span>Título</span><input id="edT" value="${esc(b.title)}" ${ro ? 'disabled' : ''} placeholder="Como está na capa"></label>`;
   h += `<label class="field"><span>Autor</span><input id="edA" list="authors" value="${esc(b.author)}" ${ro ? 'disabled' : ''} placeholder="Nome como está na capa"><datalist id="authors">${authors.map(a => `<option value="${esc(a)}"></option>`).join('')}</datalist></label><div id="edDup"></div>`;
   h += `<div class="row2"><label class="field"><span>Categoria</span><select id="edC" ${ro ? 'disabled' : ''}>${catOptions}</select></label><div class="field"><span>Exemplares</span><div class="stepper"><button class="sb" id="qMinus" ${ro ? 'disabled' : ''} aria-label="Menos um exemplar">−</button><span class="val" id="qVal">${b.copies || 1}</span><button class="sb" id="qPlus" ${ro ? 'disabled' : ''} aria-label="Mais um exemplar">+</button></div></div></div>`;
-  const extra = [b.note, b.series && (b.series + (b.volume ? ' ' + b.volume : ''))].filter(Boolean).join(' · ');
-  h += `<details class="more"><summary>Observação e série${extra ? `: <span class="sumv">${esc(extra)}</span>` : ''}</summary><label class="field"><span>Observação</span><input id="edN" value="${esc(b.note || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: lacrado, capa diferente, edição de bolso"></label><div class="row2"><label class="field"><span>Série ou coleção</span><input id="edS" value="${esc(b.series || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: Millennium"></label><label class="field"><span>Volume</span><input id="edV" type="number" min="1" inputmode="numeric" value="${b.volume || ''}" ${ro ? 'disabled' : ''}></label></div></details><div id="edDyn"></div><div class="savebar" id="edBar"></div></div></div>`;
+  const extra = [b.note, b.series && (b.series + (b.volume ? ' ' + b.volume : '')), !isNew && b.isbn && 'ISBN ' + b.isbn].filter(Boolean).join(' · ');
+  h += `<details class="more"><summary>${isNew ? 'Observação e série' : 'Observação, série e ISBN'}${extra ? `: <span class="sumv">${esc(extra)}</span>` : ''}</summary><label class="field"><span>Observação</span><input id="edN" value="${esc(b.note || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: lacrado, capa diferente, edição de bolso"></label><div class="row2"><label class="field"><span>Série ou coleção</span><input id="edS" value="${esc(b.series || '')}" ${ro ? 'disabled' : ''} placeholder="Ex.: Millennium"></label><label class="field"><span>Volume</span><input id="edV" type="number" min="1" inputmode="numeric" value="${b.volume || ''}" ${ro ? 'disabled' : ''}></label></div>${isNew ? '' : `<div class="field"><span>ISBN</span>${isbnInput}</div>`}</details><div id="edDyn"></div><div class="savebar" id="edBar"></div></div></div>`;
   $('#layer').innerHTML = h;
   const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); }); $('#close').onclick = closeLayer;
   let typingTimer = null;
@@ -243,10 +295,32 @@ function drawEditor() {
   $('#edC').onchange = onTyped;
   $('#qMinus').onclick = () => { ED.b.copies = Math.max(1, (ED.b.copies || 1) - 1); $('#qVal').textContent = ED.b.copies; };
   $('#qPlus').onclick = () => { ED.b.copies = (ED.b.copies || 1) + 1; $('#qVal').textContent = ED.b.copies; };
+  // ISBN: look it up when the number is complete, or on "Buscar"; or read it with the camera.
+  let lastLookup = '';
+  const isbnMsg = html => { const m = $('#edIsbnMsg'); if (m) m.innerHTML = html; };
+  const findIsbn = async force => {
+    const el = $('#edI'); if (!el) return; const v = cleanIsbn(el.value);
+    if (!isIsbn(v)) { if (force) isbnMsg('Esse número não parece um ISBN. Ele tem 10 ou 13 dígitos, e os de 13 começam com 978 ou 979.'); return; }
+    if (v === lastLookup && !force) return; lastLookup = v;
+    isbnMsg('Procurando esse ISBN…');
+    const r = await lookupIsbn(v);
+    if (!ED || !$('#edI') || cleanIsbn($('#edI').value) !== v) return;
+    if (!r) { isbnMsg('Não achei esse ISBN no Google Books nem no Open Library. Escreva o título e o autor à mão.'); return; }
+    $('#edT').value = r.title; if (r.author) $('#edA').value = r.author;
+    isbnMsg(`Achei no ${r.source}. Confira o título e o autor: às vezes eles vêm diferentes do que está na capa.`);
+    onTyped();
+  };
+  const isbnEl = $('#edI');
+  if (isbnEl && !ro) {
+    isbnEl.addEventListener('input', () => { onTyped(); if (isIsbn(cleanIsbn(isbnEl.value))) findIsbn(false); });
+    isbnEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); findIsbn(true); } });
+    $('#isbnGo').onclick = () => findIsbn(true);
+  }
+  const scanBtn = $('#scan'); if (scanBtn) scanBtn.onclick = () => openScanner(code => { const el = $('#edI'); if (!el) return; el.value = code; onTyped(); findIsbn(true); });
   drawEditorDynamic();
-  if (isNew) $('#edT').focus();
+  if (isNew && canDrag()) $('#edI').focus(); // on a computer; on phones, don't pop the keyboard up
 }
-function readFields() { const b = ED.b, g = id => $('#' + id); if (!g('edT')) return; b.title = g('edT').value; b.author = g('edA').value; b.category = g('edC').value; b.note = g('edN').value; b.series = g('edS').value; b.volume = parseInt(g('edV').value, 10) || 0; }
+function readFields() { const b = ED.b, g = id => $('#' + id); if (!g('edT')) return; b.title = g('edT').value; b.author = g('edA').value; b.category = g('edC').value; b.note = g('edN').value; b.series = g('edS').value; b.volume = parseInt(g('edV').value, 10) || 0; if (g('edI')) b.isbn = cleanIsbn(g('edI').value); }
 // The part of the editor that changes while typing (duplicate warning, place, suggestions),
 // redrawn on its own so the text fields keep their focus and content.
 function drawEditorDynamic() {
@@ -258,7 +332,8 @@ function drawEditorDynamic() {
   if (b.row > n) b.row = n;
   const len = editorRowLength(); b.index = Math.max(0, Math.min(b.index || 0, len));
   const bare = t => titleKey(String(t).replace(/\(.*?\)/g, ''));
-  const dup = isNew && b.title.trim().length > 2 ? S.books.find(x => bare(x.title) === bare(b.title) && (!b.author.trim() || authorKey(x.author) === authorKey(b.author))) : null;
+  const sameIsbn = isNew && isIsbn(cleanIsbn(b.isbn)) ? S.books.find(x => x.isbn && cleanIsbn(x.isbn) === cleanIsbn(b.isbn)) : null;
+  const dup = sameIsbn || (isNew && b.title.trim().length > 2 ? S.books.find(x => bare(x.title) === bare(b.title) && (!b.author.trim() || authorKey(x.author) === authorKey(b.author))) : null);
   $('#edDup').innerHTML = dup ? `<div class="sug dup"><div>Esse livro já está no estoque: <b>${esc(dup.title)}</b>, ${esc(locate(dup).text)}, ${dup.copies || 1} ${(dup.copies || 1) > 1 ? 'exemplares' : 'exemplar'}.</div><button class="btn" id="addCopy" data-id="${esc(dup.id)}">Somar 1 exemplar a esse</button></div>` : '';
   const guess = isNew && !b.shelf ? guessShelf(b) : null;
   const sug = b.shelf && (b.title || b.author) ? suggestPosition(b, b.shelf) : null;
@@ -275,7 +350,13 @@ function drawEditorDynamic() {
   $('#edBar').innerHTML = ro ? '' : `<button class="btn blue" id="save">${isNew ? 'Adicionar ao estoque' : 'Salvar'}</button>`;
   const on = (id, fn) => { const el = $('#' + id); if (el) el.onclick = fn; };
   const applySuggestion = () => { const s = suggestPosition(b, b.shelf); b.row = s.row; b.index = s.index; };
-  on('addCopy', async () => { const d = S.byId[$('#addCopy').dataset.id]; closeLayer(); try { await updateShelf(d.shelf, doc => { const x = doc.books.find(y => y.id === d.id); if (x) x.copies = (x.copies || 1) + 1; return doc; }); toast(`Agora são ${(d.copies || 1) + 1} exemplares de ${d.title}.`); } catch (e) { toast(errorMessage(e)); } });
+  on('addCopy', async () => {
+    const d = S.byId[$('#addCopy').dataset.id]; const nextShelf = b.shelf || d.shelf; closeLayer();
+    try {
+      await updateShelf(d.shelf, doc => { const x = doc.books.find(y => y.id === d.id); if (x) x.copies = (x.copies || 1) + 1; return doc; });
+      openEditor(null, { shelf: nextShelf, added: `Mais 1 exemplar de <b>${esc(d.title)}</b>. Agora são ${(d.copies || 1) + 1}.` });
+    } catch (e) { toast(errorMessage(e)); }
+  });
   document.querySelectorAll('#edShelf [data-shelf]').forEach(x => x.onclick = () => { readFields(); b.shelf = x.dataset.shelf; applySuggestion(); ED.manualPlace = false; drawEditorDynamic(); });
   on('useShelf', () => { readFields(); b.shelf = $('#useShelf').dataset.shelf; applySuggestion(); ED.manualPlace = false; drawEditorDynamic(); });
   document.querySelectorAll('#edRow [data-row]').forEach(x => x.onclick = () => { readFields(); b.row = +x.dataset.row; b.index = editorRowLength(); ED.manualPlace = true; drawEditorDynamic(); });
@@ -294,14 +375,16 @@ async function saveEditor() {
   if (!b.title.trim()) { toast('Escreva o título do livro.'); $('#edT').focus(); return; }
   if (!b.category) { toast('Escolha uma categoria.'); $('#edC').focus(); return; }
   if (!b.shelf) { toast('Escolha em qual estante ele fica.'); return; }
-  b.title = b.title.trim(); b.author = b.author.trim(); b.note = (b.note || '').trim(); b.series = (b.series || '').trim(); if (!b.series) b.volume = 0;
+  b.title = b.title.trim(); b.author = b.author.trim(); b.note = (b.note || '').trim(); b.series = (b.series || '').trim(); if (!b.series) b.volume = 0; b.isbn = cleanIsbn(b.isbn);
   const { isNew, original } = ED; const shelf = b.shelf, row = b.row || 0, index = b.index || 0;
   const btn = $('#save'); btn.disabled = true; btn.textContent = 'Salvando…';
   try {
     if (isNew || original.shelf === shelf) await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== b.id); insertBook(d.books, b, row, index); return d; });
     else await updateTwoShelves(shelf, original.shelf, (to, from) => { from.books = from.books.filter(x => x.id !== b.id); to.books = to.books.filter(x => x.id !== b.id); insertBook(to.books, b, row, index); return [to, from]; });
+    const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${index + 1}º` : ' · sem fileira'}`;
     closeLayer();
-    toast(`${isNew ? 'Adicionado' : 'Salvo'}: ${b.title} · ${shelfName(shelf)}${row ? ` · fileira ${row} · ${index + 1}º` : ' · sem fileira'}`);
+    if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
+    else toast(`Salvo: ${b.title} · ${where}`);
     if (!S.query && S.current !== shelf) { S.current = shelf; remember(); render(); }
   } catch (e) { btn.disabled = false; btn.textContent = isNew ? 'Adicionar ao estoque' : 'Salvar'; toast(errorMessage(e)); }
 }
@@ -530,8 +613,8 @@ function download(filename, content, type) {
 const today = () => new Date().toISOString().slice(0, 10);
 function exportCsv() {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Estante', 'Fileira', 'Posição', 'Título', 'Autor', 'Categoria', 'Exemplares', 'Série', 'Volume', 'Observação'].map(q).join(';')];
-  shelfList().forEach(s => rowLists(s.id).forEach((l, row) => l.forEach((b, i) => lines.push([s.name, row || 'sem fileira', row ? i + 1 : '', b.title, b.author, category(b.category)[0], b.copies || 1, b.series || '', b.volume || '', b.note || ''].map(q).join(';')))));
+  const lines = [['Estante', 'Fileira', 'Posição', 'Título', 'Autor', 'Categoria', 'Exemplares', 'Série', 'Volume', 'Observação', 'ISBN'].map(q).join(';')];
+  shelfList().forEach(s => rowLists(s.id).forEach((l, row) => l.forEach((b, i) => lines.push([s.name, row || 'sem fileira', row ? i + 1 : '', b.title, b.author, category(b.category)[0], b.copies || 1, b.series || '', b.volume || '', b.note || '', b.isbn || ''].map(q).join(';')))));
   download(`book-palace-${today()}.csv`, '﻿' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 }
 function exportJson() {
@@ -550,7 +633,7 @@ function parseBackup(j) {
   const out = {};
   for (const [id, d] of Object.entries(shelves)) {
     if (!/^[A-Za-z0-9_\-]{1,100}$/.test(id) || !d || !Array.isArray(d.books)) return null;
-    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
+    out[id] = { name: String(d.name || id).slice(0, 80), order: Number(d.order) || 0, rows: Math.max(1, Math.min(30, parseInt(d.rows, 10) || 1)), books: d.books.filter(b => b && b.id && b.title).map(b => cleanBook({ ...b, title: String(b.title), author: String(b.author || ''), note: b.note ? String(b.note) : '', series: b.series ? String(b.series) : '', isbn: b.isbn ? String(b.isbn) : '', volume: parseInt(b.volume, 10) || 0, copies: parseInt(b.copies, 10) || 1, row: parseInt(b.row, 10) || 0, category: CATEGORIES[b.category] ? b.category : 'DIV' })) };
   }
   return out;
 }
@@ -606,7 +689,7 @@ $('#fab').onclick = () => openEditor(null);
 let searchTimer = null;
 $('#q').addEventListener('input', e => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { S.query = e.target.value.trim(); $('#qclear').hidden = !S.query; render(); }, 150); });
 $('#qclear').onclick = () => { $('#q').value = ''; S.query = ''; $('#qclear').hidden = true; render(); $('#q').focus(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (DRAG.active) endDrag(true); else if ($('#ov')) closeLayer(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (SCAN) SCAN.stop(); else if (DRAG.active) endDrag(true); else if ($('#ov')) closeLayer(); } });
 
 /* ---------- start ---------- */
 (async () => {

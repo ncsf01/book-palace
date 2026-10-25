@@ -19,6 +19,8 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 - **Arrumar sem digitar**: depois de arrumar uma fileira de verdade, toque no último livro dela e todos os anteriores dessa lista vão pra essa fileira, na mesma ordem. Também dá pra tocar um por um.
 - **Ordem A–Z sugerida**: pelo nome do autor como aparece na capa (Dan Brown fica no D). Livros do mesmo autor ficam juntos e as séries seguem a ordem dos volumes.
 - **Livro novo**: o app sugere a estante (onde estão os outros livros do mesmo autor) e a posição certa na ordem A–Z. Se o livro já existir, ele avisa e oferece somar mais um exemplar.
+- **ISBN e código de barras**: digite o ISBN, ou leia o código de barras com a câmera do celular (no Chrome do Android), e o título e o autor vêm preenchidos pelo Google Books ou, se não achar lá, pelo Open Library. A busca vai direto do navegador pra esses serviços.
+- **Vários livros seguidos**: depois de salvar um livro novo, o formulário abre de novo na mesma estante, pronto pro próximo.
 - **Busca** por título, autor, série ou observação, mostrando onde o livro está, como "Amarela · fileira 2 · 7º".
 - **Backup**: baixa o estoque como planilha (CSV) ou como arquivo de backup (JSON), e importa esse backup de volta.
 - **Atualização ao vivo**: o que uma pessoa muda aparece na hora no celular da outra.

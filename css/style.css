@@ -179,3 +179,14 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
   .jarrow{display:grid;place-items:center}
   .jumpbar{position:sticky;top:var(--headH,108px);z-index:4;background:var(--bg);padding-top:8px}
 }
+.added{background:rgba(46,125,50,.1);border:1px solid rgba(46,125,50,.35);border-radius:12px;padding:10px 12px;font-size:14px;margin:0 0 14px}
+.isbnrow{display:flex;gap:8px}
+.isbnrow input{flex:1 1 auto;min-width:0}
+.scanbtn{width:100%;padding:12px;margin-bottom:8px;color:var(--blue);border-color:var(--blue)}
+.isbnmsg{font-size:13px;color:var(--muted)}
+.isbnmsg:empty{display:none}
+.scanner{position:fixed;inset:0;z-index:45;background:#000;color:#fff;display:grid;place-items:center}
+.scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scanframe{position:relative;width:min(80vw,360px);height:min(32vw,150px);border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
+.scanner p{position:absolute;top:calc(env(safe-area-inset-top,0px) + 24px);left:16px;right:16px;margin:0;text-align:center;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
+.scanner .btn{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);left:50%;transform:translateX(-50%);background:#fff;color:#000;border:0;padding:12px 22px}
