@@ -654,6 +654,8 @@ function toast(msg, action, fn) {
   clearTimeout(toastTimer); let el = $('#toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
   el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button id="toastAction">${esc(action)}</button>` : ''}`;
+  const bar = document.querySelector('#ov .savebar:not(:empty)'); // stay above a sheet's save button
+  el.style.bottom = bar ? `${Math.max(84, innerHeight - bar.getBoundingClientRect().top + 10)}px` : '';
   if (action) $('#toastAction').onclick = () => { el.remove(); fn(); };
   toastTimer = setTimeout(() => el.remove(), action ? 6000 : 3500);
 }
