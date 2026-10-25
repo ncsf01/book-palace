@@ -289,7 +289,7 @@ const canScan = () => 'BarcodeDetector' in window && !!(navigator.mediaDevices &
 let SCAN = null;
 async function openScanner(onCode) {
   const box = document.createElement('div'); box.className = 'scanner';
-  box.innerHTML = `<video playsinline muted></video><div class="scanframe"></div><p>Aponte a câmera pro código de barras do livro.</p><button class="btn" id="scanStop">Cancelar</button>`;
+  box.innerHTML = `<video playsinline muted></video><div class="scanframe"></div><p>Aponte pro código de barras, com o celular a uns 20 cm do livro. Toque na imagem pra focar de novo.</p><div class="scanacts"><button class="btn" id="scanTorch" hidden>Lanterna</button><button class="btn" id="scanStop">Cancelar</button></div><div class="scanhelp" id="scanHelp" hidden>Não está lendo? Afaste um pouco o celular, ou cancele e digite o número que fica embaixo do código.</div>`;
   document.body.appendChild(box);
   let stream = null, timer = null;
   const stop = () => { clearTimeout(timer); if (stream) stream.getTracks().forEach(t => t.stop()); box.remove(); SCAN = null; };
@@ -298,9 +298,20 @@ async function openScanner(onCode) {
     const supported = await BarcodeDetector.getSupportedFormats();
     const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(f => supported.includes(f));
     const detector = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    // A higher resolution makes phones use the main camera; zoom lets the phone stay far enough
+    // from the book to focus (cameras can't focus very close).
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
     if (!SCAN) { stream.getTracks().forEach(t => t.stop()); return; } // cancelled while asking for the camera
     const video = box.querySelector('video'); video.srcObject = stream; await video.play();
+    const track = stream.getVideoTracks()[0];
+    const caps = (track && track.getCapabilities) ? track.getCapabilities() : {};
+    const set = async c => { try { await track.applyConstraints({ advanced: [c] }); } catch (e) {} };
+    const focusModes = caps.focusMode || [];
+    if (focusModes.includes('continuous')) await set({ focusMode: 'continuous' });
+    if (caps.zoom && caps.zoom.max >= 1.5) await set({ zoom: Math.min(caps.zoom.max, 2) });
+    video.onclick = async () => { if (focusModes.includes('single-shot')) { await set({ focusMode: 'single-shot' }); if (focusModes.includes('continuous')) setTimeout(() => set({ focusMode: 'continuous' }), 1500); } };
+    if (caps.torch) { let on = false; const tb = box.querySelector('#scanTorch'); tb.hidden = false; tb.onclick = async () => { on = !on; await set({ torch: on }); tb.classList.toggle('on', on); }; }
+    setTimeout(() => { const hp = box.querySelector('#scanHelp'); if (hp && SCAN) hp.hidden = false; }, 12000);
     const tick = async () => {
       if (!SCAN) return;
       try {

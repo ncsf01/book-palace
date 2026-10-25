@@ -189,7 +189,10 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .scanner video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .scanframe{position:relative;width:min(80vw,360px);height:min(32vw,150px);border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45)}
 .scanner p{position:absolute;top:calc(env(safe-area-inset-top,0px) + 24px);left:16px;right:16px;margin:0;text-align:center;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.6)}
-.scanner .btn{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);left:50%;transform:translateX(-50%);background:#fff;color:#000;border:0;padding:12px 22px}
+.scanacts{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);left:0;right:0;display:flex;justify-content:center;gap:10px}
+.scanacts .btn{background:#fff;color:#000;border:0;padding:12px 22px}
+.scanacts .btn.on{background:#ffd54f}
+.scanhelp{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);left:16px;right:16px;text-align:center;font-size:14px;background:rgba(0,0,0,.6);border-radius:10px;padding:8px 10px}
 /* Covers: a small cover in lists (or a block in the category color), a bigger one in the editor. */
 .pic{display:block;width:32px;height:46px}
 .pic .thumb{display:block;width:32px;height:46px;object-fit:cover;border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.1)}
@@ -218,3 +221,4 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .pastebox{border-top:1px solid var(--line);padding-top:10px;margin-top:4px}
 .pastebox a.btn{text-decoration:none;color:var(--fg);white-space:nowrap}
 .pastebox input{border:1px solid var(--line);background:var(--soft2);border-radius:10px;padding:12px;font-size:16px;color:var(--fg)}
+.scanframe,.scanner p,.scanhelp{pointer-events:none}
