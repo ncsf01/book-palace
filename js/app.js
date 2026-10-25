@@ -499,11 +499,28 @@ async function changeRows(delta) {
 }
 
 /* ---------- account, backup and import ---------- */
+/* ---------- light and dark ---------- */
+// "auto" follows the phone or computer setting; "light" and "dark" are fixed choices,
+// remembered in this browser only.
+const THEMES = { auto: 'Automático', light: 'Claro', dark: 'Escuro' };
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function getTheme() { try { const t = localStorage.getItem('book-palace:theme'); return t === 'light' || t === 'dark' ? t : 'auto'; } catch (e) { return 'auto'; } }
+function applyTheme(t) {
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  const dark = t === 'dark' || (t === 'auto' && darkQuery.matches);
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = dark ? '#000000' : '#ffffff';
+}
+function setTheme(t) { try { if (t === 'auto') localStorage.removeItem('book-palace:theme'); else localStorage.setItem('book-palace:theme', t); } catch (e) {} applyTheme(t); }
+darkQuery.addEventListener('change', () => applyTheme(getTheme()));
+applyTheme(getTheme());
+
 function openAccount() {
   const demo = S.store.mode === 'demo';
-  $('#layer').innerHTML = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="acTitle"><div class="grab"></div><div class="sheeth"><h2 id="acTitle">${demo ? 'Modo demonstração' : 'Sua conta'}</h2><button class="x" id="close" aria-label="Fechar">×</button></div><p class="hint">${demo ? 'Nada aqui vai pra internet: os livros ficam só neste navegador. Pra usar de verdade, configure o Firebase (veja o README do projeto).' : `Você entrou como <b>${esc(S.user.name)}</b>${S.user.email ? ` (${esc(S.user.email)})` : ''}.`}</p><div class="sheetf">${demo ? '<button class="btn" id="resetDemo">Recomeçar a demonstração</button>' : '<button class="btn" data-action="signout">Sair</button>'}</div></div></div>`;
+  const theme = getTheme();
+  $('#layer').innerHTML = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="acTitle"><div class="grab"></div><div class="sheeth"><h2 id="acTitle">${demo ? 'Modo demonstração' : 'Sua conta'}</h2><button class="x" id="close" aria-label="Fechar">×</button></div><div class="field"><span>Aparência</span><div class="seg" role="group" aria-label="Aparência">${Object.entries(THEMES).map(([k, nm]) => `<button data-theme-set="${k}" class="${theme === k ? 'on' : ''}" aria-pressed="${theme === k}">${nm}</button>`).join('')}</div></div><p class="hint">${demo ? 'Nada aqui vai pra internet: os livros ficam só neste navegador. Pra usar de verdade, configure o Firebase (veja o README do projeto).' : `Você entrou como <b>${esc(S.user.name)}</b>${S.user.email ? ` (${esc(S.user.email)})` : ''}.`}</p><div class="sheetf">${demo ? '<button class="btn" id="resetDemo">Recomeçar a demonstração</button>' : '<button class="btn" data-action="signout">Sair</button>'}</div></div></div>`;
   const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); }); $('#close').onclick = closeLayer;
   const r = $('#resetDemo'); if (r) r.onclick = () => S.store.resetDemo();
+  ov.querySelectorAll('[data-theme-set]').forEach(x => x.onclick = () => { setTheme(x.dataset.themeSet); ov.querySelectorAll('[data-theme-set]').forEach(y => { const on = y === x; y.classList.toggle('on', on); y.setAttribute('aria-pressed', on); }); });
 }
 function download(filename, content, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));

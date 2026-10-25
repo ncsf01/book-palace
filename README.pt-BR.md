@@ -22,6 +22,7 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 - **Busca** por título, autor, série ou observação, mostrando onde o livro está, como "Amarela · fileira 2 · 7º".
 - **Backup**: baixa o estoque como planilha (CSV) ou como arquivo de backup (JSON), e importa esse backup de volta.
 - **Atualização ao vivo**: o que uma pessoa muda aparece na hora no celular da outra.
+- **Modo escuro**: segue o modo do celular ou do computador, ou dá pra escolher na mão no menu da conta.
 
 ## Experimente sem configurar nada
 

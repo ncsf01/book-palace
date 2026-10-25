@@ -1,17 +1,28 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later
    Book Palace, Copyright (C) 2026 ncsf01 (https://github.com/ncsf01/book-palace)
 
-   Light theme with Instagram-style colors.
+   Light and dark themes with Instagram-style colors.
    Layout: sticky header with search, shelves shown as "stories", and each shelf as
    side-by-side row columns (the bookcase seen with your head tilted to the left). */
 :root{
   --bg:#ffffff; --fg:#262626; --muted:#737373; --line:#dbdbdb; --soft:#efefef; --soft2:#fafafa;
-  --blue:#0095f6; --blue-press:#1877f2; --red:#ed4956; --scrim:rgba(0,0,0,.45); --ink-on:#ffffff; --hot:#7cc4ff;
+  --blue:#0095f6; --blue-press:#1877f2; --red:#ed4956; --scrim:rgba(0,0,0,.45); --ink-on:#ffffff; --hot:#7cc4ff; --on-accent:#ffffff;
   --grad:linear-gradient(45deg,#feda75 0%,#fa7e1e 25%,#d62976 50%,#962fbf 75%,#4f5bd5 100%);
   --brand:"Grand Hotel","Brush Script MT",cursive;
   --ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --gutL:max(16px,env(safe-area-inset-left,0px)); --gutR:max(16px,env(safe-area-inset-right,0px));
   color-scheme:light;
+}
+/* Dark theme: follows the device setting unless "Claro" was chosen, or forced by "Escuro". */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#000000; --fg:#f5f5f5; --muted:#a8a8a8; --line:#363636; --soft:#262626; --soft2:#121212;
+    --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#000000; --fg:#f5f5f5; --muted:#a8a8a8; --line:#363636; --soft:#262626; --soft2:#121212;
+  --scrim:rgba(0,0,0,.65); --ink-on:#000000; --hot:#0095f6; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -42,7 +53,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .ring{width:68px;height:68px;border-radius:50%;padding:3px;background:var(--grad)}
 .story.add .ring{background:var(--line)}
 .disc{width:100%;height:100%;border-radius:50%;background:var(--bg);border:3px solid var(--bg);display:grid;place-items:center;font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
-.story.on .disc{background:var(--grad);color:var(--ink-on)}
+.story.on .disc{background:var(--grad);color:var(--on-accent)}
 .story.add .disc{font-size:28px;font-weight:400;color:var(--muted)}
 .story .nm{font-size:12.5px;max-width:76px;text-align:center;line-height:1.2;overflow-wrap:anywhere}
 .story.on .nm{font-weight:700}
@@ -57,7 +68,7 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .seg button.on{background:var(--bg);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .btn{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:14px;font-weight:600}
 .btn:disabled{opacity:.4;cursor:default}
-.btn.blue{background:var(--blue);border-color:var(--blue);color:var(--ink-on)}
+.btn.blue{background:var(--blue);border-color:var(--blue);color:var(--on-accent)}
 .btn.blue:active{background:var(--blue-press)}
 .btn.link{border:0;background:transparent;color:var(--blue);padding:6px 4px}
 .btn.danger{border:0;background:transparent;color:var(--red)}
@@ -108,7 +119,7 @@ body.dragging .board{scroll-snap-type:none}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
 footer.foot{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;color:var(--muted);font-size:13px}
-.fab{position:fixed;right:calc(env(safe-area-inset-right,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:6;border:0;background:var(--grad);color:var(--ink-on);font-weight:700;font-size:16px;padding:14px 20px;border-radius:999px;box-shadow:0 6px 18px rgba(214,41,118,.35)}
+.fab{position:fixed;right:calc(env(safe-area-inset-right,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:6;border:0;background:var(--grad);color:var(--on-accent);font-weight:700;font-size:16px;padding:14px 20px;border-radius:999px;box-shadow:0 6px 18px rgba(214,41,118,.35)}
 
 .dropbar{position:fixed;left:0;right:0;bottom:0;z-index:35;background:var(--bg);border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(0,0,0,.08);padding:10px var(--gutR) calc(env(safe-area-inset-bottom,0px) + 12px) var(--gutL)}
 .dropbar .dl{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin:2px 0 6px}

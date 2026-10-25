@@ -22,6 +22,7 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".
 - **Backup**: download the stock as a spreadsheet (CSV) or as a backup file (JSON), and import that backup back.
 - **Live updates**: a change made on one phone shows up right away on the others.
+- **Dark mode**: follows the phone or computer setting, or can be set by hand in the account menu.
 
 ## Try it without setting anything up
 
