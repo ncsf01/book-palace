@@ -26,5 +26,11 @@ service cloud.firestore {
     match /photos/{photo} {
       allow read, write: if isAllowed();
     }
+
+    // History of books coming in and going out. Lines are added, or deleted by
+    // "Desfazer", but never changed.
+    match /history/{entry} {
+      allow read, create, delete: if isAllowed();
+    }
   }
 }

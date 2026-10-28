@@ -186,6 +186,7 @@ function render() {
   const signedIn = !!S.user;
   $('#total').innerHTML = S.loaded && signedIn && !S.noAccess ? `<b>${countCopies(S.books)}</b> livros` : '';
   const acc = $('#account'); acc.hidden = !signedIn;
+  $('#historyBtn').hidden = !(S.loaded && signedIn && !S.noAccess);
   if (signedIn) acc.innerHTML = S.user.photo ? `<img src="${esc(S.user.photo)}" alt="" referrerpolicy="no-referrer">` : `<span>${esc((S.user.name || '?').charAt(0).toUpperCase())}</span>`;
   $('#searchbox').hidden = !(S.loaded && signedIn && !S.noAccess);
   $('#fab').hidden = !canEdit() || !Object.keys(S.shelves).length;
@@ -331,6 +332,26 @@ async function openScanner(onCode) {
   } catch (e) { stop(); toast(e && e.name === 'NotAllowedError' ? 'O navegador não deixou usar a câmera. Libere a câmera pra este site nas configurações.' : 'Não consegui abrir a câmera.'); }
 }
 
+/* ---------- history ---------- */
+// Every time books come in or go out, a line is saved: what, how many, who and when.
+// Types: 'add' (new book or more copies), 'out' (sold or donated), 'adjust' (copies changed
+// in the editor) and 'import' (a backup). The stock change never waits on, nor fails because
+// of, the history: if the line can't be saved, the app says so once.
+let historyWarned = false;
+const whoAmI = () => { const u = S.user || {}; return String(u.name || u.email || '').split(/[\s@]/)[0]; };
+const bookInfo = (b, shelf) => ({ bookId: b.id, title: b.title, author: b.author || '', shelf: shelfName(shelf || b.shelf) });
+async function logHistory(entry) {
+  try { return { id: await S.store.addHistory({ at: Date.now(), by: whoAmI(), ...entry }) }; }
+  catch (e) { return { error: e && e.code === 'permission-denied' ? 'rules' : 'other' }; }
+}
+// The note to add to a message when a history line couldn't be saved (shown only once).
+function historyNote(r) {
+  if (!r || !r.error || historyWarned) return '';
+  historyWarned = true;
+  return r.error === 'rules' ? ' (O histórico não foi gravado: falta atualizar as regras do Firebase.)' : ' (O histórico não foi gravado agora.)';
+}
+const warnHistory = r => { const n = historyNote(r); if (n) toast(n.trim().replace(/^\(|\)$/g, '')); };
+
 /* ---------- book editor (edit and add) ---------- */
 let ED = null;
 // Redrawing a sheet while a finger or the mouse is pressing one of its buttons would
@@ -349,7 +370,7 @@ function openEditor(id, opts = {}) {
   const b = isNew ? { id: newId('n'), title: '', author: '', category: '', copies: 1, note: '', series: '', volume: 0, isbn: '', shelf: '', row: 0 } : { ...S.byId[id] };
   if (!isNew) { const loc = locate(b); b.row = loc.row; b.index = loc.index >= 0 ? loc.index : 0; } else b.index = 0;
   if (isNew && opts.shelf && S.shelves[opts.shelf]) { b.shelf = opts.shelf; const s = suggestPosition(b, b.shelf); b.row = s.row; b.index = s.index; }
-  ED = { isNew, original: isNew ? null : { shelf: b.shelf }, b, confirmDelete: false, manualPlace: !isNew, added: opts.added || '' };
+  ED = { isNew, original: isNew ? null : { shelf: b.shelf, copies: b.copies || 1 }, b, confirmDelete: false, manualPlace: !isNew, added: opts.added || '' };
   drawEditor();
 }
 const editorRowLength = () => { const b = ED.b; if (!b.shelf) return 0; return (rowLists(b.shelf, b.id)[b.row || 0] || []).length; };
@@ -518,7 +539,13 @@ function drawEditorDynamic() {
     h += `<div class="field"><span>${b.row ? 'Posição na fileira, contando da esquerda' : 'Posição na lista do Sem fileira'}</span><div class="stepper"><button class="sb" id="pMinus" ${ro || b.index <= 0 ? 'disabled' : ''} aria-label="Uma posição pra esquerda">−</button><span class="val">${slotOf(rowList, b.index)}º</span><button class="sb" id="pPlus" ${ro || b.index >= len ? 'disabled' : ''} aria-label="Uma posição pra direita">+</button><span class="of">de ${countCopies(rowList) + (b.copies || 1)}${(b.copies || 1) > 1 ? `, ocupa até o ${slotOf(rowList, b.index) + b.copies - 1}º` : ''}</span><button class="btn" id="pStart" ${ro ? 'disabled' : ''}>Início</button><button class="btn" id="pEnd" ${ro ? 'disabled' : ''}>Fim</button></div></div>`;
     if (sug && !ro) h += `<div class="sug small"><div>Pela ordem A–Z: ${sug.text}</div><button class="btn" id="useSuggestion">Usar essa posição</button></div>`;
   }
-  if (!ro && !isNew) h += `<div class="sheetf">${ED.confirmDelete ? `<div class="confirm">Tirar este livro do estoque? <button class="btn" id="deleteYes" style="color:var(--red)">Sim, tirar</button><button class="btn" id="deleteNo">Não</button></div>` : `<button class="btn danger" id="delete">Tirar do estoque (vendido ou doado)</button>`}</div>`;
+  if (!ro && !isNew) {
+    const saved = (S.byId[b.id] && S.byId[b.id].copies) || 1, reason = ED.reason || 'vendido';
+    h += `<div class="outbox"><div class="outhead"><span>Saiu do estoque?</span><div class="seg" role="group" aria-label="Motivo"><button data-reason="vendido" class="${reason === 'vendido' ? 'on' : ''}">Vendido</button><button data-reason="doado" class="${reason === 'doado' ? 'on' : ''}">Doado</button></div></div>`;
+    if (ED.confirmDelete) h += `<div class="confirm">Tirar ${saved > 1 ? `os ${saved} exemplares` : 'este livro'} do estoque (${reason})? <button class="btn" id="deleteYes" style="color:var(--red)">Sim, tirar</button><button class="btn" id="deleteNo">Não</button></div>`;
+    else h += `<div class="outacts">${saved > 1 ? `<button class="btn" id="outOne">Saiu 1 exemplar</button><button class="btn danger" id="delete">Tirar todos (${saved})</button>` : '<button class="btn danger" id="delete">Tirar do estoque</button>'}</div>`;
+    h += '</div>';
+  }
   $('#edDyn').innerHTML = h;
   $('#edBar').innerHTML = ro ? '' : `<button class="btn blue" id="save">${isNew ? 'Adicionar ao estoque' : 'Salvar'}</button>`;
   const on = (id, fn) => { const el = $('#' + id); if (el) el.onclick = fn; };
@@ -527,6 +554,7 @@ function drawEditorDynamic() {
     const d = S.byId[$('#addCopy').dataset.id]; const nextShelf = b.shelf || d.shelf; closeLayer();
     try {
       await updateShelf(d.shelf, doc => { const x = doc.books.find(y => y.id === d.id); if (x) x.copies = (x.copies || 1) + 1; return doc; });
+      logHistory({ type: 'add', qty: 1, ...bookInfo(d) }).then(warnHistory);
       openEditor(null, { shelf: nextShelf, added: `Mais 1 exemplar de <b>${esc(d.title)}</b>. Agora são ${(d.copies || 1) + 1}.` });
     } catch (e) { toast(errorMessage(e)); }
   });
@@ -541,7 +569,31 @@ function drawEditorDynamic() {
   on('save', saveEditor);
   on('delete', () => { ED.confirmDelete = true; drawEditorDynamic(); });
   on('deleteNo', () => { ED.confirmDelete = false; drawEditorDynamic(); });
-  on('deleteYes', async () => { const shelf = ED.original.shelf, id = b.id, title = b.title; if (b.photo) S.store.deletePhoto(id).catch(() => {}); closeLayer(); try { await updateShelf(shelf, d => { d.books = d.books.filter(x => x.id !== id); return d; }); toast(`${title} saiu do estoque.`); } catch (e) { toast(errorMessage(e)); } });
+  document.querySelectorAll('#edDyn [data-reason]').forEach(x => x.onclick = () => { ED.reason = x.dataset.reason; drawEditorDynamic(); });
+  on('outOne', () => takeOut(S.byId[b.id] || b, 1, ED.reason || 'vendido'));
+  on('deleteYes', () => { const cur = S.byId[b.id] || b; takeOut(cur, cur.copies || 1, ED.reason || 'vendido'); });
+}
+// Copies leaving the stock (sold or donated). One copy can be undone; taking out every copy
+// removes the book, after a confirmation in the editor.
+async function takeOut(b, qty, reason) {
+  const shelf = b.shelf, id = b.id; closeLayer();
+  try {
+    let left = 0;
+    await updateShelf(shelf, d => {
+      const x = d.books.find(y => y.id === id); if (!x) return d;
+      const c = x.copies || 1;
+      if (qty >= c) { d.books = d.books.filter(y => y.id !== id); left = 0; } else { x.copies = c - qty; left = x.copies; }
+      return d;
+    });
+    if (!left && b.photo) S.store.deletePhoto(id).catch(() => {});
+    const r = await logHistory({ type: 'out', qty, reason, ...bookInfo(b, shelf) });
+    const verb = reason === 'doado' ? 'doado' : 'vendido';
+    if (left) {
+      toast(`${b.title}: 1 exemplar ${verb}. Agora ${left > 1 ? `são ${left}` : 'é 1'}.${historyNote(r)}`, 'Desfazer', async () => {
+        try { await updateShelf(shelf, d => { const x = d.books.find(y => y.id === id); if (x) x.copies = (x.copies || 1) + 1; return d; }); if (r.id) S.store.deleteHistory(r.id).catch(() => {}); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); }
+      });
+    } else toast(`${b.title} saiu do estoque (${qty > 1 ? `${qty} exemplares ${verb}s` : verb}).${historyNote(r)}`);
+  } catch (e) { toast(errorMessage(e)); }
 }
 async function saveEditor() {
   readFields(); const b = ED.b;
@@ -565,6 +617,8 @@ async function saveEditor() {
     if (dropPhoto) S.store.deletePhoto(b.id).catch(() => {});
     const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${placeText(slotOf(rowLists(shelf, b.id)[row] || [], index), b.copies)}` : ' · sem fileira'}`;
     closeLayer();
+    if (isNew) logHistory({ type: 'add', qty: b.copies || 1, ...bookInfo(b, shelf) }).then(warnHistory);
+    else if ((b.copies || 1) !== original.copies) logHistory({ type: 'adjust', qty: (b.copies || 1) - original.copies, ...bookInfo(b, shelf) }).then(warnHistory);
     if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
     else toast(`Salvo: ${b.title} · ${where}`);
     if (!S.query && S.current !== shelf) { S.current = shelf; remember(); render(); }
@@ -766,6 +820,60 @@ async function changeRows(delta) {
   try { await updateShelf(S.current, d => { if (delta < 0 && d.books.some(x => (x.row || 0) > n)) return d; d.rows = n; return d; }); } catch (e) { toast(errorMessage(e)); }
 }
 
+/* ---------- history screen ---------- */
+const HIST = { period: 30, items: null, full: false };
+const dayLabel = t => {
+  const d = new Date(t), today = new Date(); const key = x => x.toDateString();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  if (key(d) === key(today)) return 'Hoje';
+  if (key(d) === key(yesterday)) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+};
+const timeOf = t => new Date(t).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const copiesWord = n => `${n} ${n === 1 ? 'exemplar' : 'exemplares'}`;
+function historyLine(x) {
+  const q = Math.abs(x.qty || 0);
+  if (x.type === 'add') return ['in', 'Entrou', copiesWord(q)];
+  if (x.type === 'out') return [x.reason === 'doado' ? 'gift' : 'sold', x.reason === 'doado' ? 'Doado' : 'Vendido', copiesWord(q)];
+  if (x.type === 'adjust') return ['edit', 'Exemplares ajustados', `${x.qty > 0 ? '+' : '−'}${q} na edição`];
+  if (x.type === 'import') return ['edit', 'Backup importado', `${q} livros`];
+  return ['edit', x.type, ''];
+}
+async function openHistory() {
+  const draw = body => {
+    $('#layer').innerHTML = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="hiTitle"><div class="grab"></div><div class="sheeth"><h2 id="hiTitle">Histórico</h2><button class="x" id="close" aria-label="Fechar">×</button></div><div class="seg" role="group" aria-label="Período">${[[7, '7 dias'], [30, '30 dias'], [0, 'Tudo']].map(([d, l]) => `<button data-period="${d}" class="${HIST.period === d ? 'on' : ''}">${l}</button>`).join('')}</div>${body}</div></div>`;
+    const ov = $('#ov'); ov.addEventListener('click', e => { if (e.target === ov) closeLayer(); }); $('#close').onclick = closeLayer;
+    ov.querySelectorAll('[data-period]').forEach(x => x.onclick = () => { HIST.period = +x.dataset.period; if (HIST.items) draw(historyBody()); });
+    const csv = $('#histCsv'); if (csv) csv.onclick = exportHistoryCsv;
+  };
+  draw('<p class="hint">Abrindo o histórico…</p>');
+  try { HIST.items = await S.store.listHistory(500); HIST.full = HIST.items.length >= 500; }
+  catch (e) { draw(`<p class="hint">${e && e.code === 'permission-denied' ? 'Pra ver o histórico, falta atualizar as regras do Firebase. Veja o README do projeto.' : 'Não consegui abrir o histórico agora. Confira a internet.'}</p>`); return; }
+  if ($('#hiTitle')) draw(historyBody());
+}
+function historyBody() {
+  const since = HIST.period ? Date.now() - HIST.period * 86400000 : 0;
+  const list = HIST.items.filter(x => (x.at || 0) >= since);
+  if (!list.length) return `<p class="hint">${HIST.items.length ? 'Nada nesse período.' : 'Ainda não tem nada no histórico. Ele começa a contar a partir desta versão do app: livros que entrarem, forem vendidos ou doados aparecem aqui.'}</p>`;
+  const sum = { sold: 0, gift: 0, in: 0 };
+  list.forEach(x => { if (x.type === 'out') sum[x.reason === 'doado' ? 'gift' : 'sold'] += x.qty || 0; if (x.type === 'add') sum.in += x.qty || 0; });
+  let h = `<p class="histsum">${HIST.period ? `Nos últimos ${HIST.period} dias` : 'No total'}: <b>${sum.sold}</b> ${sum.sold === 1 ? 'vendido' : 'vendidos'} · <b>${sum.gift}</b> ${sum.gift === 1 ? 'doado' : 'doados'} · <b>${sum.in}</b> ${sum.in === 1 ? 'entrou' : 'entraram'}</p>`;
+  let day = '';
+  list.forEach(x => {
+    const d = dayLabel(x.at); if (d !== day) { day = d; h += `<div class="letter">${esc(d)}</div>`; }
+    const [cls, verb, qty] = historyLine(x);
+    h += `<div class="hrow"><span class="hdot ${cls}"></span><div><div><b>${esc(verb)}</b> · ${esc(qty)}${x.title ? ` — ${esc(x.title)}` : ''}</div><small>${[x.author, x.shelf, x.by, timeOf(x.at)].filter(Boolean).map(esc).join(' · ')}</small></div></div>`;
+  });
+  if (HIST.full && !HIST.period) h += `<p class="hint">Mostrando os 500 registros mais recentes.</p>`;
+  return h + `<div class="sheetf"><button class="btn link" id="histCsv">Baixar histórico (CSV)</button></div>`;
+}
+function exportHistoryCsv() {
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [['Data', 'Hora', 'O que', 'Quantidade', 'Título', 'Autor', 'Estante', 'Quem'].map(q).join(';')];
+  (HIST.items || []).forEach(x => { const [, verb] = historyLine(x); lines.push([new Date(x.at).toLocaleDateString('pt-BR'), timeOf(x.at), verb, x.qty, x.title, x.author, x.shelf, x.by].map(q).join(';')); });
+  download(`book-palace-historico-${today()}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+}
+
 /* ---------- account, backup and import ---------- */
 /* ---------- light and dark ---------- */
 // "auto" follows the phone or computer setting; "light" and "dark" are fixed choices,
@@ -830,7 +938,7 @@ $('#file').addEventListener('change', async e => {
   const replaced = Object.keys(data).filter(id => S.shelves[id]).length;
   $('#layer').innerHTML = `<div class="overlay" id="ov"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="imTitle"><div class="grab"></div><div class="sheeth"><h2 id="imTitle">Importar backup</h2><button class="x" id="close" aria-label="Fechar">×</button></div><p class="hint">O arquivo tem <b>${n} estantes</b> e <b>${books} livros</b>.${replaced ? ` ${replaced} ${replaced > 1 ? 'estantes já existem e vão ser substituídas' : 'estante já existe e vai ser substituída'} pelo que está no arquivo.` : ''} As outras estantes continuam como estão.</p><div class="sheetf"><button class="btn blue" id="importYes">Importar</button><button class="btn" id="importNo">Cancelar</button></div></div></div>`;
   const ov = $('#ov'); ov.addEventListener('click', ev => { if (ev.target === ov) closeLayer(); }); $('#close').onclick = closeLayer; $('#importNo').onclick = closeLayer;
-  $('#importYes').onclick = async () => { $('#importYes').disabled = true; try { await S.store.importShelves(data); closeLayer(); toast(`Importado: ${books} livros.`); } catch (err) { $('#importYes').disabled = false; toast(errorMessage(err)); } };
+  $('#importYes').onclick = async () => { $('#importYes').disabled = true; try { await S.store.importShelves(data); closeLayer(); const r = await logHistory({ type: 'import', qty: books, title: `${n} ${n > 1 ? 'estantes' : 'estante'}`, author: '', shelf: '', bookId: '' }); toast(`Importado: ${books} livros.${historyNote(r)}`); } catch (err) { $('#importYes').disabled = false; toast(errorMessage(err)); } };
 });
 
 /* ---------- toasts ---------- */
@@ -860,6 +968,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.closest('#layer')) return;
   if (e.target.closest('#account')) { openAccount(); return; }
+  if (e.target.closest('#historyBtn')) { openHistory(); return; }
   if (e.target.closest('#newShelf') || e.target.closest('#createFirst')) { openShelfEditor(null); return; }
   const st = e.target.closest('.story'); if (st) { S.current = st.dataset.shelf; S.query = ''; $('#q').value = ''; $('#qclear').hidden = true; remember(); render(); return; }
   const vw = e.target.closest('[data-view]'); if (vw) { S.view = vw.dataset.view; remember(); render(); return; }

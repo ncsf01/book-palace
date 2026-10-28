@@ -26,6 +26,8 @@ It runs in the browser with nothing to install and can be hosted for free on **G
 - **Search** by title, author, series or note, showing where the book is, like "Amarela · fileira 2 · 7º".
 - **Backup**: download the stock as a spreadsheet (CSV) or as a backup file (JSON), and import that backup back.
 - **Live updates**: a change made on one phone shows up right away on the others.
+- **Selling and donating**: in a book's editor, "Saiu 1 exemplar" takes out one copy (with undo) and "Tirar todos" the whole book, marked as sold or donated.
+- **History**: the clock at the top lists what came in, was sold, donated or had its copies changed, by whom and when, with totals for the last 7 or 30 days and a CSV download. It starts counting from the version that introduced it.
 - **Dark mode**: follows the phone or computer setting, or can be set by hand in the account menu.
 
 ## Try it without setting anything up
@@ -122,7 +124,9 @@ A `shelves` collection in Firestore, with one document per shelf:
 
 Cover photos are kept in a second collection, `photos`, with one document per book (the book's `id`) holding a small JPEG: `{ "data": "data:image/jpeg;base64,…", "at": 1761400000000 }`. They don't fit in the shelf documents, which Firestore limits to 1 MiB each. The backup file ("Baixar backup") doesn't include the photos.
 
-> **Upgrading from an older version?** Photos need the `photos` block of [`firestore.rules`](firestore.rules). Add it to the rules in the Firebase console and publish.
+A third collection, `history`, has one document per event: `{ "at": 1761400000000, "type": "out", "qty": 1, "reason": "vendido", "bookId": "b12", "title": "…", "author": "…", "shelf": "Amarela", "by": "Nícolas" }`. `type` is `add`, `out`, `adjust` (copies changed in the editor) or `import`.
+
+> **Upgrading from an older version?** Photos and history need the `photos` and `history` blocks of [`firestore.rules`](firestore.rules). Add them to the rules in the Firebase console and publish.
 
 A book's position within its row is its order in the list. Every change is saved in a transaction, so two people editing at the same time don't overwrite each other's work.
 

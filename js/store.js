@@ -11,12 +11,17 @@
 //
 // Cover photos taken with the phone live in a separate "photos" collection, one small JPEG
 // (as a data: address) per book: { data, at }. They don't fit in the shelf documents.
+//
+// The "history" collection keeps one document per event (books coming in or going out):
+// { at, type, qty, reason?, bookId, title, author, shelf, by }. Lines are added, or deleted by
+// "Desfazer", never changed.
 
 import { FIREBASE_CONFIG } from './config.js';
 
 const FIREBASE_VERSION = '10.12.2';
 const COLLECTION = 'shelves';
 const PHOTOS = 'photos';
+const HISTORY = 'history';
 const clone = o => (o == null ? o : JSON.parse(JSON.stringify(o)));
 
 export async function openStore() {
@@ -33,7 +38,7 @@ async function openFirebase(cfg) {
   ]);
   const { initializeApp } = appMod;
   const { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } = authMod;
-  const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, runTransaction, writeBatch, setDoc, deleteDoc } = fsMod;
+  const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, runTransaction, writeBatch, setDoc, deleteDoc, addDoc, query, orderBy, limit, getDocs } = fsMod;
 
   const app = initializeApp(cfg);
   const auth = getAuth(app);
@@ -94,6 +99,13 @@ async function openFirebase(cfg) {
     },
     setPhoto: (id, data) => setDoc(doc(db, PHOTOS, id), { data, at: Date.now() }),
     deletePhoto: id => deleteDoc(doc(db, PHOTOS, id)),
+    // History: add a line (returns its id), delete one, or list the newest ones.
+    addHistory: async entry => (await addDoc(collection(db, HISTORY), entry)).id,
+    deleteHistory: id => deleteDoc(doc(db, HISTORY, id)),
+    async listHistory(max) {
+      const snap = await getDocs(query(collection(db, HISTORY), orderBy('at', 'desc'), limit(max)));
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    },
   };
 }
 
@@ -109,6 +121,9 @@ async function openDemo() {
   const listeners = new Set();
   const PHOTO_KEY = 'book-palace:demo-photos', photoListeners = new Set();
   let photos = {}; try { photos = JSON.parse(localStorage.getItem(PHOTO_KEY) || '{}') || {}; } catch (e) { photos = {}; }
+  const HISTORY_KEY = 'book-palace:demo-history';
+  let history = []; try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]') || []; } catch (e) { history = []; }
+  const saveHistory = () => { try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch (e) {} };
   const savePhotos = () => { try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photos)); } catch (e) {} setTimeout(() => photoListeners.forEach(cb => cb({ ...photos })), 0); };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(shelves)); } catch (e) {} };
   const notify = () => listeners.forEach(cb => cb(clone(shelves), { pending: false, fromCache: false }));
@@ -128,6 +143,9 @@ async function openDemo() {
     subscribePhotos(onData) { photoListeners.add(onData); setTimeout(() => onData({ ...photos }), 0); return () => photoListeners.delete(onData); },
     async setPhoto(id, data) { photos[id] = data; savePhotos(); },
     async deletePhoto(id) { delete photos[id]; savePhotos(); },
-    async resetDemo() { try { localStorage.removeItem(KEY); localStorage.removeItem(PHOTO_KEY); } catch (e) {} location.reload(); },
+    async addHistory(entry) { const id = 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); history.push({ id, ...entry }); saveHistory(); return id; },
+    async deleteHistory(id) { history = history.filter(x => x.id !== id); saveHistory(); },
+    async listHistory(max) { return [...history].sort((a, b) => b.at - a.at).slice(0, max); },
+    async resetDemo() { try { localStorage.removeItem(KEY); localStorage.removeItem(PHOTO_KEY); localStorage.removeItem(HISTORY_KEY); } catch (e) {} location.reload(); },
   };
 }

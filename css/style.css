@@ -36,7 +36,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-left:calc(-1*var(--gutL));margin-right:calc(-1*var(--gutR));padding:10px var(--gutR) 10px var(--gutL)}
 .toprow{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:1100px;margin:0 auto}
 .brand{font-family:var(--brand);font-size:clamp(21px,7vw,34px);line-height:1.05;margin:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.topright{display:flex;align-items:center;gap:10px}
+.topright{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .total{color:var(--muted);font-size:14px;white-space:nowrap}
 .total b{color:var(--fg);font-variant-numeric:tabular-nums}
 .account{width:34px;height:34px;border-radius:50%;border:0;padding:2px;background:var(--grad);flex:0 0 auto}
@@ -231,3 +231,16 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .cropacts .btn{padding:12px 22px}
 .cropacts .btn:not(.blue){background:#fff;color:#000;border:0}
 .scanframe,.scanner p,.scanhelp{pointer-events:none}
+/* Taking copies out of the stock, in the editor. */
+.outbox{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:6px 0 4px;display:grid;gap:10px}
+.outhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-weight:600;font-size:14px}
+.outacts{display:flex;flex-wrap:wrap;gap:8px}
+/* History: a clock button in the header and a list grouped by day. */
+.iconbtn{display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:var(--fg);padding:0}
+.iconbtn:active{background:var(--soft)}
+.histsum{margin:12px 0 4px;font-size:14px}
+.hrow{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.letter+.hrow{border-top:0}
+.hrow small{color:var(--muted);font-size:12.5px}
+.hdot{width:10px;height:10px;border-radius:50%;margin-top:5px;background:var(--muted)}
+.hdot.in{background:#2e7d32}.hdot.sold{background:var(--blue)}.hdot.gift{background:#962fbf}
