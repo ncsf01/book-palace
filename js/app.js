@@ -335,10 +335,11 @@ async function openScanner(onCode) {
 /* ---------- history ---------- */
 // Every time books come in or go out, a line is saved: what, how many, who and when.
 // Types: 'add' (new book or more copies), 'out' (sold or donated), 'adjust' (copies changed
-// in the editor) and 'import' (a backup). The stock change never waits on, nor fails because
+// in the editor), 'move' (another shelf or row; from/to say where) and 'import' (a backup). The stock change never waits on, nor fails because
 // of, the history: if the line can't be saved, the app says so once.
 let historyWarned = false;
 const whoAmI = () => { const u = S.user || {}; return String(u.name || u.email || '').split(/[\s@]/)[0]; };
+const placeName = (shelf, row) => `${shelfName(shelf)} · ${row ? 'fileira ' + row : 'sem fileira'}`;
 const bookInfo = (b, shelf) => ({ bookId: b.id, title: b.title, author: b.author || '', shelf: shelfName(shelf || b.shelf) });
 async function logHistory(entry) {
   try { return { id: await S.store.addHistory({ at: Date.now(), by: whoAmI(), ...entry }) }; }
@@ -370,7 +371,7 @@ function openEditor(id, opts = {}) {
   const b = isNew ? { id: newId('n'), title: '', author: '', category: '', copies: 1, note: '', series: '', volume: 0, isbn: '', shelf: '', row: 0 } : { ...S.byId[id] };
   if (!isNew) { const loc = locate(b); b.row = loc.row; b.index = loc.index >= 0 ? loc.index : 0; } else b.index = 0;
   if (isNew && opts.shelf && S.shelves[opts.shelf]) { b.shelf = opts.shelf; const s = suggestPosition(b, b.shelf); b.row = s.row; b.index = s.index; }
-  ED = { isNew, original: isNew ? null : { shelf: b.shelf, copies: b.copies || 1 }, b, confirmDelete: false, manualPlace: !isNew, added: opts.added || '' };
+  ED = { isNew, original: isNew ? null : { shelf: b.shelf, copies: b.copies || 1, row: b.row || 0 }, b, confirmDelete: false, manualPlace: !isNew, added: opts.added || '' };
   drawEditor();
 }
 const editorRowLength = () => { const b = ED.b; if (!b.shelf) return 0; return (rowLists(b.shelf, b.id)[b.row || 0] || []).length; };
@@ -618,7 +619,10 @@ async function saveEditor() {
     const where = `${shelfName(shelf)}${row ? ` · fileira ${row} · ${placeText(slotOf(rowLists(shelf, b.id)[row] || [], index), b.copies)}` : ' · sem fileira'}`;
     closeLayer();
     if (isNew) logHistory({ type: 'add', qty: b.copies || 1, ...bookInfo(b, shelf) }).then(warnHistory);
-    else if ((b.copies || 1) !== original.copies) logHistory({ type: 'adjust', qty: (b.copies || 1) - original.copies, ...bookInfo(b, shelf) }).then(warnHistory);
+    else {
+      if ((b.copies || 1) !== original.copies) logHistory({ type: 'adjust', qty: (b.copies || 1) - original.copies, ...bookInfo(b, shelf) }).then(warnHistory);
+      if (shelf !== original.shelf || row !== original.row) logHistory({ type: 'move', qty: b.copies || 1, from: placeName(original.shelf, original.row), to: placeName(shelf, row), ...bookInfo(b, shelf) }).then(warnHistory);
+    }
     if (isNew) openEditor(null, { shelf, added: `Adicionado: <b>${esc(b.title)}</b> · ${esc(where)}.` });
     else toast(`Salvo: ${b.title} · ${where}`);
     if (!S.query && S.current !== shelf) { S.current = shelf; remember(); render(); }
@@ -653,7 +657,9 @@ async function arrangeTap(id) {
   const startAt = mode === 'upto' ? 0 : at; // where they were in the unplaced list, for "Desfazer"
   try {
     await updateShelf(shelf, d => { const picked = ids.map(i => d.books.find(x => x.id === i)).filter(Boolean); d.books = d.books.filter(x => !ids.includes(x.id)); picked.forEach(p => insertBook(d.books, p, row, 1e9)); return d; });
-    toast(ids.length > 1 ? `${ids.length} livros foram pra fileira ${row}.` : `${(S.byId[id] || {}).title || 'Livro'} foi pra fileira ${row}.`, 'Desfazer', async () => { try { await updateShelf(shelf, d => { const back = ids.map(i => d.books.find(x => x.id === i)).filter(Boolean); d.books = d.books.filter(x => !ids.includes(x.id)); back.forEach((p, k) => insertBook(d.books, p, 0, startAt + k)); return d; }); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); } });
+    const one = S.byId[id] || {};
+    const r = await logHistory({ type: 'move', qty: ids.length, bookId: ids.length === 1 ? id : '', title: ids.length === 1 ? one.title : `${ids.length} livros`, author: ids.length === 1 ? (one.author || '') : '', shelf: shelfName(shelf), from: placeName(shelf, 0), to: placeName(shelf, row) });
+    toast((ids.length > 1 ? `${ids.length} livros foram pra fileira ${row}.` : `${one.title || 'Livro'} foi pra fileira ${row}.`) + historyNote(r), 'Desfazer', async () => { try { await updateShelf(shelf, d => { const back = ids.map(i => d.books.find(x => x.id === i)).filter(Boolean); d.books = d.books.filter(x => !ids.includes(x.id)); back.forEach((p, k) => insertBook(d.books, p, 0, startAt + k)); return d; }); if (r.id) S.store.deleteHistory(r.id).catch(() => {}); toast('Desfeito.'); } catch (e) { toast(errorMessage(e)); } });
   } catch (e) { toast(errorMessage(e)); }
   busy = false;
 }
@@ -764,7 +770,8 @@ async function endDrag(cancelled) {
     await moveBook(id, target.shelf, target.row, target.index);
     const where = target.shelf !== from.shelf ? `${shelfName(target.shelf)}, sem fileira` : target.row ? `fileira ${target.row}` : 'sem fileira';
     const sameRow = target.shelf === from.shelf && target.row === from.row;
-    toast(sameRow ? `${b.title} mudou de posição` : `${b.title} → ${where}`, 'Desfazer', async () => { try { await moveBook(id, from.shelf, from.row, b._startIndex ?? 0); } catch (e) { toast(errorMessage(e)); } });
+    const r = sameRow ? null : await logHistory({ type: 'move', qty: b.copies || 1, from: placeName(from.shelf, from.row), to: placeName(target.shelf, target.row), ...bookInfo(b, target.shelf) });
+    toast((sameRow ? `${b.title} mudou de posição` : `${b.title} → ${where}`) + historyNote(r), 'Desfazer', async () => { try { await moveBook(id, from.shelf, from.row, b._startIndex ?? 0); if (r && r.id) S.store.deleteHistory(r.id).catch(() => {}); } catch (e) { toast(errorMessage(e)); } });
   } catch (e) { render(); toast(errorMessage(e)); }
 }
 document.addEventListener('pointerdown', e => {
@@ -836,6 +843,7 @@ function historyLine(x) {
   if (x.type === 'add') return ['in', 'Entrou', copiesWord(q)];
   if (x.type === 'out') return [x.reason === 'doado' ? 'gift' : 'sold', x.reason === 'doado' ? 'Doado' : 'Vendido', copiesWord(q)];
   if (x.type === 'adjust') return ['edit', 'Exemplares ajustados', `${x.qty > 0 ? '+' : '−'}${q} na edição`];
+  if (x.type === 'move') return ['move', 'Mudou de lugar', `${x.from || '?'} → ${x.to || '?'}`];
   if (x.type === 'import') return ['edit', 'Backup importado', `${q} livros`];
   return ['edit', x.type, ''];
 }
@@ -869,8 +877,8 @@ function historyBody() {
 }
 function exportHistoryCsv() {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['Data', 'Hora', 'O que', 'Quantidade', 'Título', 'Autor', 'Estante', 'Quem'].map(q).join(';')];
-  (HIST.items || []).forEach(x => { const [, verb] = historyLine(x); lines.push([new Date(x.at).toLocaleDateString('pt-BR'), timeOf(x.at), verb, x.qty, x.title, x.author, x.shelf, x.by].map(q).join(';')); });
+  const lines = [['Data', 'Hora', 'O que', 'Quantidade', 'Título', 'Autor', 'Estante', 'De', 'Para', 'Quem'].map(q).join(';')];
+  (HIST.items || []).forEach(x => { const [, verb] = historyLine(x); lines.push([new Date(x.at).toLocaleDateString('pt-BR'), timeOf(x.at), verb, x.qty, x.title, x.author, x.shelf, x.from || '', x.to || '', x.by].map(q).join(';')); });
   download(`book-palace-historico-${today()}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 }
 

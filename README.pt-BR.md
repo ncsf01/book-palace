@@ -27,7 +27,7 @@ Ele roda direto no navegador, sem nada pra instalar, e pode ser hospedado de gra
 - **Backup**: baixa o estoque como planilha (CSV) ou como arquivo de backup (JSON), e importa esse backup de volta.
 - **Atualização ao vivo**: o que uma pessoa muda aparece na hora no celular da outra.
 - **Venda e doação**: na edição do livro, "Saiu 1 exemplar" tira um exemplar (dá pra desfazer) e "Tirar todos" tira o livro inteiro, marcando se foi vendido ou doado.
-- **Histórico**: o relógio no topo mostra o que entrou, foi vendido, doado ou teve os exemplares mudados, quem fez e quando, com os totais dos últimos 7 ou 30 dias e download em CSV. Ele começa a contar a partir da versão que trouxe essa função.
+- **Histórico**: o relógio no topo mostra o que entrou, foi vendido, doado, mudou de estante ou de fileira, ou teve os exemplares mudados, quem fez e quando, com os totais dos últimos 7 ou 30 dias e download em CSV. Ele começa a contar a partir da versão que trouxe essa função.
 - **Modo escuro**: segue o modo do celular ou do computador, ou dá pra escolher na mão no menu da conta.
 
 ## Experimente sem configurar nada
@@ -126,7 +126,7 @@ Uma coleção `shelves` no Firestore, com um documento por estante. Os nomes dos
 
 As fotos de capa ficam numa segunda coleção, `photos`, com um documento por livro (o `id` do livro) guardando um JPEG pequeno: `{ "data": "data:image/jpeg;base64,…", "at": 1761400000000 }`. Elas não cabem nos documentos das estantes, que o Firestore limita a 1 MiB cada. O arquivo de backup ("Baixar backup") não inclui as fotos.
 
-Uma terceira coleção, `history`, tem um documento por acontecimento: `{ "at": 1761400000000, "type": "out", "qty": 1, "reason": "vendido", "bookId": "b12", "title": "…", "author": "…", "shelf": "Amarela", "by": "Nícolas" }`. O `type` é `add` (entrou), `out` (saiu), `adjust` (exemplares mudados na edição) ou `import` (backup importado).
+Uma terceira coleção, `history`, tem um documento por acontecimento: `{ "at": 1761400000000, "type": "out", "qty": 1, "reason": "vendido", "bookId": "b12", "title": "…", "author": "…", "shelf": "Amarela", "by": "Nícolas" }`. O `type` é `add` (entrou), `out` (saiu), `adjust` (exemplares mudados na edição), `move` (mudou de estante ou fileira, com `from` e `to`) ou `import` (backup importado).
 
 > **Atualizando de uma versão antiga?** As fotos e o histórico precisam dos blocos `photos` e `history` do [`firestore.rules`](firestore.rules). Acrescente eles nas regras, no console do Firebase, e publique.
 

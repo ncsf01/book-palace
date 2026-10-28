@@ -243,4 +243,4 @@ details.more summary{cursor:pointer;color:var(--blue);font-weight:600;font-size:
 .letter+.hrow{border-top:0}
 .hrow small{color:var(--muted);font-size:12.5px}
 .hdot{width:10px;height:10px;border-radius:50%;margin-top:5px;background:var(--muted)}
-.hdot.in{background:#2e7d32}.hdot.sold{background:var(--blue)}.hdot.gift{background:#962fbf}
+.hdot.in{background:#2e7d32}.hdot.sold{background:var(--blue)}.hdot.gift{background:#962fbf}.hdot.move{background:#fa7e1e}
